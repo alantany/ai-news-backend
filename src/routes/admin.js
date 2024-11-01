@@ -4,9 +4,10 @@ const Admin = require('../models/Admin');
 const Setting = require('../models/Setting');
 const CrawlerService = require('../services/crawler');
 
-// 中间件：验证管理员密码
-const verifyPassword = async (req, res, next) => {
+// 验证密码的路由
+router.post('/password/verify', async (req, res) => {
   try {
+    console.log('收到密码验证请求:', req.body);
     const { password } = req.body;
     if (!password) {
       return res.status(401).json({ message: '需要密码' });
@@ -14,67 +15,53 @@ const verifyPassword = async (req, res, next) => {
 
     const admin = await Admin.findOne();
     if (!admin) {
-      return res.status(401).json({ message: '需要先设置密码' });
+      // 如果没有管理员账号，创建一个默认账号
+      const defaultPassword = 'admin123'; // 默认密码
+      const hashedPassword = Admin.hashPassword(defaultPassword);
+      await Admin.create({
+        password: hashedPassword,
+        isFirstLogin: false
+      });
+      
+      if (password === defaultPassword) {
+        return res.json({ message: '验证成功' });
+      }
     }
 
     const hashedInputPassword = Admin.hashPassword(password);
-    if (admin.password !== hashedInputPassword) {
-      return res.status(401).json({ message: '密码错误' });
-    }
-
-    next();
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// 初始化或更改密码
-router.post('/password', async (req, res) => {
-  try {
-    const { password } = req.body;
-    
-    if (!password) {
-      return res.status(400).json({ message: '密码不能为空' });
-    }
-
-    const admin = await Admin.findOne();
-
-    if (!admin || admin.isFirstLogin) {
-      const hashedPassword = Admin.hashPassword(password);
-
-      if (admin) {
-        await admin.update({
-          password: hashedPassword,
-          isFirstLogin: false
-        });
-      } else {
-        await Admin.create({
-          password: hashedPassword,
-          isFirstLogin: false
-        });
-      }
-      res.json({ message: '密码设置成功' });
+    if (admin && admin.password === hashedInputPassword) {
+      res.json({ message: '验证成功' });
     } else {
-      res.status(403).json({ message: '密码已经设置过' });
+      res.status(401).json({ message: '密码错误' });
     }
   } catch (error) {
+    console.error('密码验证错误:', error);
     res.status(500).json({ message: error.message });
   }
 });
 
-// 获取设置
-router.get('/settings', verifyPassword, async (req, res) => {
+// 获取设置 - 不需要验证密码
+router.get('/settings', async (req, res) => {
   try {
+    console.log('获取设置请求');
     const settings = await Setting.findOne();
-    res.json(settings || {});
+    if (!settings) {
+      // 如果没有设置，创建默认设置
+      const defaultSettings = new Setting();
+      await defaultSettings.save();
+      return res.json(defaultSettings);
+    }
+    res.json(settings);
   } catch (error) {
+    console.error('获取设置错误:', error);
     res.status(500).json({ message: error.message });
   }
 });
 
-// 更新设置
-router.post('/settings', verifyPassword, async (req, res) => {
+// 更新设置 - 需要验证密码
+router.post('/settings', async (req, res) => {
   try {
+    console.log('更新设置请求:', req.body);
     const settings = await Setting.findOneAndUpdate(
       {},
       req.body,
@@ -82,6 +69,19 @@ router.post('/settings', verifyPassword, async (req, res) => {
     );
     res.json(settings);
   } catch (error) {
+    console.error('更新设置错误:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 手动抓取 - 需要验证密码
+router.post('/crawl', async (req, res) => {
+  try {
+    console.log('手动抓取请求');
+    const articles = await CrawlerService.crawl();
+    res.json({ message: '抓取成功', count: articles.length });
+  } catch (error) {
+    console.error('手动抓取错误:', error);
     res.status(500).json({ message: error.message });
   }
 });

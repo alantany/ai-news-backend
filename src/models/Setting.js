@@ -3,12 +3,12 @@ const mongoose = require('mongoose');
 const settingSchema = new mongoose.Schema({
   crawlInterval: {
     type: Number,
-    default: 240,
+    default: 60,
     required: true
   },
   preArticlesPerSource: {
     type: Number,
-    default: 20,
+    default: 10,
     required: true
   },
   finalArticlesCount: {
@@ -23,6 +23,18 @@ const settingSchema = new mongoose.Schema({
   },
   lastCrawlTime: {
     type: Date
+  },
+  keywords: {
+    type: Map,
+    of: [String],
+    default: () => new Map([
+      ['LLM', ['GPT', 'Large Language Model', 'ChatGPT', 'Claude']],
+      ['RAG', ['Retrieval Augmented Generation']],
+      ['TRAINING', ['Fine-tuning', 'Training', 'Pre-training']],
+      ['APPLICATIONS', ['Applications', 'Use Cases', 'Implementation']],
+      ['TOOLS', ['Tools', 'Libraries', 'Frameworks']],
+      ['COMPANIES', ['OpenAI', 'Anthropic', 'Google', 'Microsoft']]
+    ])
   }
 });
 
