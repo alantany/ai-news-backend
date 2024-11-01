@@ -3,15 +3,35 @@ const Article = require('../models/Article');
 
 class CrawlerService {
   constructor() {
-    this.parser = new Parser();
+    this.parser = new Parser({
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)',
+        'Accept': 'application/rss+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      timeout: 10000,
+      maxRedirects: 5
+    });
+
     this.rssSources = [
+      {
+        name: 'Towards Data Science',
+        url: 'https://towardsdatascience.com/feed'
+      },
+      {
+        name: 'Microsoft AI Blog',
+        url: 'https://blogs.microsoft.com/ai/feed/'
+      },
+      {
+        name: 'TechCrunch AI',
+        url: 'https://techcrunch.com/tag/artificial-intelligence/feed/'
+      },
+      {
+        name: 'Reddit r/artificial',
+        url: 'https://www.reddit.com/r/artificial/.rss'
+      },
       {
         name: 'OpenAI Blog',
         url: 'https://openai.com/blog/rss.xml'
-      },
-      {
-        name: 'Google AI Blog',
-        url: 'http://ai.googleblog.com/feeds/posts/default'
       }
     ];
   }
@@ -25,14 +45,18 @@ class CrawlerService {
         try {
           console.log(`正在从 ${source.name} 抓取...`);
           const feed = await this.parser.parseURL(source.url);
+          console.log(`从 ${source.name} 获取到 ${feed.items.length} 篇文章`);
           
           const articles = feed.items.map(item => ({
             title: item.title,
-            content: item.content || item.description,
+            content: item.content || item.description || '',
+            summary: this.generateSummary(item.content || item.description || ''),
             source: source.name,
-            url: item.link,
-            publishDate: new Date(item.pubDate),
-            category: 'AI'
+            url: item.link || item.guid,
+            publishDate: new Date(item.pubDate || item.isoDate),
+            category: 'AI',
+            likes: 0,
+            views: 0
           }));
 
           allArticles = [...allArticles, ...articles];
@@ -41,6 +65,9 @@ class CrawlerService {
           continue;
         }
       }
+
+      // 按发布日期排序
+      allArticles.sort((a, b) => b.publishDate - a.publishDate);
 
       // 保存到数据库
       for (const article of allArticles) {
@@ -57,6 +84,14 @@ class CrawlerService {
       console.error('抓取文章失败:', error);
       throw error;
     }
+  }
+
+  generateSummary(content) {
+    if (!content) return '';
+    // 移除 HTML 标签
+    const text = content.replace(/<[^>]*>/g, '');
+    // 取前 200 个字符作为摘要
+    return text.slice(0, 200) + '...';
   }
 }
 
