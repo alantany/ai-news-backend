@@ -2,6 +2,17 @@ const express = require('express');
 const router = express.Router();
 const Article = require('../models/Article');
 
+// 获取文章总数
+router.get('/count', async (req, res) => {
+  try {
+    const count = await Article.countDocuments();
+    res.json({ count });
+  } catch (error) {
+    console.error('获取文章总数失败:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // 获取文章列表
 router.get('/', async (req, res) => {
   try {
