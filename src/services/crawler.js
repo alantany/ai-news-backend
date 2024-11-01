@@ -150,13 +150,21 @@ class CrawlerService {
       });
 
       // 保存到数据库
+      console.log(`开始保存 ${allArticles.length} 篇文章到数据库...`);
       for (const article of allArticles) {
-        await Article.findOneAndUpdate(
-          { url: article.url },
-          article,
-          { upsert: true, new: true }
-        );
+        try {
+          const savedArticle = await Article.findOneAndUpdate(
+            { url: article.url },
+            article,
+            { upsert: true, new: true }
+          );
+          console.log(`文章保存成功: ${savedArticle.title}`);
+        } catch (error) {
+          console.error(`文章保存失败:`, error);
+          console.error('文章数据:', article);
+        }
       }
+      console.log('所有文章保存完成');
 
       console.log(`抓取完成，共获取 ${allArticles.length} 篇相关文章`);
       return allArticles;
