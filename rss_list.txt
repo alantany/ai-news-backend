@@ -1,8 +1,7 @@
-towardsdatascience
-microsoft
-techcrunch
-AI news
-https://www.reddit.com
+'https://towardsdatascience.com/feed
+https://blogs.microsoft.com/ai/feed/
+https://techcrunch.com/tag/artificial-intelligence/feed/
+https://www.artificial-intelligence.blog/rss-feeds
 
 
 
