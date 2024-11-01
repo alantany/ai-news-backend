@@ -18,7 +18,6 @@ class CrawlerService {
       baseURL: process.env.BASE_URL
     });
 
-    // 固定的 RSS 源列表
     this.rssSources = [
       {
         name: 'Towards Data Science',
@@ -33,10 +32,39 @@ class CrawlerService {
         url: 'https://techcrunch.com/tag/artificial-intelligence/feed/'
       },
       {
-        name: 'AI News',
-        url: 'https://aibusiness.com/feed'
+        name: 'VentureBeat AI',
+        url: 'https://venturebeat.com/category/ai/feed/'
       }
     ];
+  }
+
+  async analyzeRelevance(title, summary) {
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "你是一个AI领域的专家，需要判断文章与AI技术的相关性。重点关注：LLM、RAG、AI训练、AI应用等主题。"
+          },
+          {
+            role: "user",
+            content: `请分析以下文章与AI技术的相关性，返回0-100的分数和简短理由：\n标题：${title}\n摘要：${summary}`
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 200
+      });
+
+      const result = response.choices[0].message.content;
+      // 提取分数
+      const scoreMatch = result.match(/\d+/);
+      const score = scoreMatch ? parseInt(scoreMatch[0]) : 0;
+      return { score, reason: result };
+    } catch (error) {
+      console.error('分析相关性失败:', error);
+      return { score: 0, reason: '分析失败' };
+    }
   }
 
   async translateText(text) {
@@ -62,9 +90,7 @@ class CrawlerService {
       return response.choices[0].message.content.trim();
     } catch (error) {
       console.error('翻译失败:', error);
-      console.error('API Key:', process.env.OPENAI_API_KEY ? '已设置' : '未设置');
-      console.error('Base URL:', process.env.BASE_URL ? '已设置' : '未设置');
-      return text; // 如果翻译失败，返回原文
+      return text;
     }
   }
 
@@ -80,23 +106,34 @@ class CrawlerService {
           console.log(`从 ${source.name} 获取到 ${feed.items.length} 篇文章`);
           
           for (const item of feed.items) {
-            const title = await this.translateText(item.title);
             const content = item.content || item.description || '';
-            const summary = await this.translateText(this.generateSummary(content));
+            const summary = this.generateSummary(content);
+            
+            // 分析文章相关性
+            const { score, reason } = await this.analyzeRelevance(item.title, summary);
+            console.log(`文章相关性分数: ${score}, 原因: ${reason}`);
 
-            const article = {
-              title,
-              content,
-              summary,
-              source: source.name,
-              url: item.link || item.guid,
-              publishDate: new Date(item.pubDate || item.isoDate),
-              category: 'AI',
-              likes: 0,
-              views: 0
-            };
+            // 只处理相关性分数大于60的文章
+            if (score > 60) {
+              const title = await this.translateText(item.title);
+              const translatedSummary = await this.translateText(summary);
 
-            allArticles.push(article);
+              const article = {
+                title,
+                content,
+                summary: translatedSummary,
+                source: source.name,
+                url: item.link || item.guid,
+                publishDate: new Date(item.pubDate || item.isoDate),
+                category: 'AI',
+                relevanceScore: score,
+                relevanceReason: reason,
+                likes: 0,
+                views: 0
+              };
+
+              allArticles.push(article);
+            }
           }
         } catch (error) {
           console.error(`从 ${source.name} 抓取失败:`, error);
@@ -104,8 +141,13 @@ class CrawlerService {
         }
       }
 
-      // 按发布日期排序
-      allArticles.sort((a, b) => b.publishDate - a.publishDate);
+      // 按相关性分数和发布日期排序
+      allArticles.sort((a, b) => {
+        if (b.relevanceScore !== a.relevanceScore) {
+          return b.relevanceScore - a.relevanceScore;
+        }
+        return b.publishDate - a.publishDate;
+      });
 
       // 保存到数据库
       for (const article of allArticles) {
@@ -116,7 +158,7 @@ class CrawlerService {
         );
       }
 
-      console.log(`抓取完成，共获取 ${allArticles.length} 篇文章`);
+      console.log(`抓取完成，共获取 ${allArticles.length} 篇相关文章`);
       return allArticles;
     } catch (error) {
       console.error('抓取文章失败:', error);
@@ -133,4 +175,4 @@ class CrawlerService {
   }
 }
 
-module.exports = new CrawlerService(); 
+module.exports = new CrawlerService();
