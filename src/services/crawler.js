@@ -26,7 +26,7 @@ class CrawlerService {
 
     // 从 rss_list.txt 读取源
     try {
-      const rssListPath = path.join(__dirname, '../../../rss_list.txt');
+      const rssListPath = path.join(__dirname, '../../rss_list.txt');
       const rssContent = fs.readFileSync(rssListPath, 'utf-8');
       const rssSources = rssContent.split('\n')
         .map(line => line.trim())
