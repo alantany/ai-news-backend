@@ -14,7 +14,8 @@ class CrawlerService {
     });
 
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
+      apiKey: process.env.OPENAI_API_KEY,
+      baseURL: process.env.BASE_URL
     });
 
     // 固定的 RSS 源列表
@@ -40,6 +41,7 @@ class CrawlerService {
 
   async translateText(text) {
     try {
+      console.log('开始翻译文本');
       const response = await this.openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
@@ -56,9 +58,12 @@ class CrawlerService {
         max_tokens: 1000
       });
 
+      console.log('翻译成功');
       return response.choices[0].message.content.trim();
     } catch (error) {
       console.error('翻译失败:', error);
+      console.error('API Key:', process.env.OPENAI_API_KEY ? '已设置' : '未设置');
+      console.error('Base URL:', process.env.BASE_URL ? '已设置' : '未设置');
       return text; // 如果翻译失败，返回原文
     }
   }
