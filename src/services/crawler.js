@@ -4,6 +4,7 @@ const Article = require('../models/Article');
 const cheerio = require('cheerio');
 const fs = require('fs').promises;
 const path = require('path');
+const Setting = require('../models/Setting');
 
 class CrawlerService {
   constructor() {
@@ -110,6 +111,11 @@ class CrawlerService {
       await this.loadRssSources();
       console.log('\n============= 开始抓取文章 =============');
       
+      // 获取设置
+      const settings = await Setting.findOne() || { preArticlesPerSource: 5 };
+      const articlesPerSource = settings.preArticlesPerSource || 5;
+      console.log(`每个源抓取数量: ${articlesPerSource}`);
+      
       if (!this.rssSources || this.rssSources.length === 0) {
         console.error('没有找到可用的 RSS 源');
         return [];
@@ -129,24 +135,24 @@ class CrawlerService {
           return [];
         }
 
-        // 处理前5篇文章
+        // 处理文章
         const savedArticles = [];
-        for (let i = 0; i < Math.min(5, feed.items.length); i++) {
+        for (let i = 0; i < Math.min(articlesPerSource, feed.items.length); i++) {
           const item = feed.items[i];
-          console.log(`\n处理第 ${i + 1} 篇文章:`, item.title);
+          console.log(`\n[${i + 1}/${articlesPerSource}] 处理文章: ${item.title}`);
           
           const processedArticle = await this.processRssItem(item, source);
           if (!processedArticle || !processedArticle.content) {
-            console.log('文章处理失败，跳过');
+            console.log('处理失败，跳过');
             continue;
           }
 
           const scoreResult = this.calculateArticleScore(processedArticle.title);
-          console.log('文章评分:', scoreResult.score);
+          console.log('评分:', scoreResult.score);
 
           const existingArticle = await Article.findOne({ url: processedArticle.link });
           if (existingArticle) {
-            console.log('文章已存在，跳过');
+            console.log('已存在，跳过');
             continue;
           }
 
@@ -165,7 +171,7 @@ class CrawlerService {
             category: scoreResult.category
           });
 
-          console.log('保存成功:', translatedTitle);
+          console.log('保存成功');
           savedArticles.push(savedArticle);
         }
 

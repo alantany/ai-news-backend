@@ -8,11 +8,6 @@ const settingSchema = new mongoose.Schema({
   },
   preArticlesPerSource: {
     type: Number,
-    default: 10,
-    required: true
-  },
-  finalArticlesCount: {
-    type: Number,
     default: 5,
     required: true
   },
@@ -23,27 +18,6 @@ const settingSchema = new mongoose.Schema({
   },
   lastCrawlTime: {
     type: Date
-  },
-  keywords: {
-    type: Map,
-    of: [String],
-    default: () => ({
-      'LLM': ['GPT', 'Large Language Model', 'ChatGPT', 'Claude'],
-      'RAG': ['Retrieval Augmented Generation'],
-      'TRAINING': ['Fine-tuning', 'Training', 'Pre-training'],
-      'APPLICATIONS': ['Applications', 'Use Cases', 'Implementation'],
-      'TOOLS': ['Tools', 'Libraries', 'Frameworks'],
-      'COMPANIES': ['OpenAI', 'Anthropic', 'Google', 'Microsoft']
-    })
-  }
-});
-
-settingSchema.set('toJSON', {
-  transform: (doc, ret) => {
-    if (ret.keywords instanceof Map) {
-      ret.keywords = Object.fromEntries(ret.keywords);
-    }
-    return ret;
   }
 });
 
