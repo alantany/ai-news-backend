@@ -142,6 +142,36 @@ class CrawlerService {
     }
   }
 
+  cleanHtmlContent(content) {
+    if (!content) return '';
+    
+    try {
+      // 移除所有 HTML 标签
+      let cleanText = content.replace(/<[^>]*>/g, ' ');
+      
+      // 移除多余的空格
+      cleanText = cleanText.replace(/\s+/g, ' ');
+      
+      // 移除 Medium 特有的链接文本
+      cleanText = cleanText.replace(/Continue reading on.*?»/, '');
+      cleanText = cleanText.replace(/Towards Data Science.*?»/, '');
+      
+      // 移除图片链接
+      cleanText = cleanText.replace(/https:\/\/cdn-images-.*?\s/g, '');
+      
+      // 处理特殊字符
+      cleanText = cleanText.replace(/&nbsp;/g, ' ');
+      cleanText = cleanText.replace(/&amp;/g, '&');
+      cleanText = cleanText.replace(/&lt;/g, '<');
+      cleanText = cleanText.replace(/&gt;/g, '>');
+      
+      return cleanText.trim();
+    } catch (error) {
+      console.error('清理HTML内容失败:', error);
+      return content;
+    }
+  }
+
   async crawl() {
     try {
       console.log('开始抓取文章...');
@@ -153,14 +183,31 @@ class CrawlerService {
           const feed = await this.parser.parseURL(source.url);
           
           for (const item of feed.items) {
-            // 尝试获取完整内容
-            const fullContent = await this.fetchFullContent(item.link);
-            const content = fullContent || item.content || item.contentSnippet || item.description || '';
+            let content = item.content || item.contentSnippet || item.description || '';
+            
+            // 对 Medium 文章进行特殊处理
+            if (item.link && item.link.includes('towardsdatascience.com')) {
+              console.log('检测到 Medium 文章，进行特殊处理');
+              content = this.cleanHtmlContent(content);
+              
+              // 如果内容太短，可能是预览，尝试获取更多内容
+              if (content.length < 500) {
+                console.log('Medium 文章内容太短，尝试获取完整内容');
+                try {
+                  const fullContent = await this.fetchFullContent(item.link);
+                  if (fullContent && fullContent.length > content.length) {
+                    content = fullContent;
+                  }
+                } catch (error) {
+                  console.error('获取 Medium 完整内容失败:', error);
+                }
+              }
+            }
             
             console.log('\n=================== 原文详情 ===================');
             console.log('标题:', item.title);
             console.log('内容长度:', content.length);
-            console.log('原文内容:\n', content);
+            console.log('清理后的内容:\n', content);
             console.log('===============================================\n');
 
             const { score, category } = this.calculateArticleScore(
