@@ -20,17 +20,20 @@ router.get('/', async (req, res) => {
     const { page = 1, pageSize = 10 } = req.query;
     const skip = (page - 1) * pageSize;
 
-    const articles = await Article.find()
-      .select('title summary source url publishDate likes views')
-      .sort({ publishDate: -1 })
-      .skip(skip)
-      .limit(parseInt(pageSize));
+    const [articles, total] = await Promise.all([
+      Article.find()
+        .select('title summary source url publishDate likes views category')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(pageSize)),
+      Article.countDocuments()
+    ]);
 
     res.json({
       articles,
-      total: articles.length,
+      total,
       currentPage: parseInt(page),
-      totalPages: Math.ceil(articles.length / pageSize)
+      totalPages: Math.ceil(total / pageSize)
     });
   } catch (error) {
     console.error('获取文章列表错误:', error);
