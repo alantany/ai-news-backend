@@ -127,35 +127,17 @@ class CrawlerService {
           const feed = await this.parser.parseURL(source.url);
           
           // 处理每篇文章，添加分数和分类
-          const scoredArticles = feed.items.map(item => {
+          for (const item of feed.items) {
             const content = item.content || item.contentSnippet || item.description || '';
             console.log('原文内容长度:', content.length);
             console.log('原文内容预览:', content.substring(0, 100));
-
-            // 如果内容太短，尝试从 link 获取完整内容
-            if (content.length < 500 && item.link) {
-              try {
-                console.log('尝试从原文链接获取完整内容:', item.link);
-                const response = await fetch(item.link);
-                const html = await response.text();
-                // 这里需要根据不同网站的结构来提取文章内容
-                // 这只是一个简单的示例
-                const articleContent = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-                if (articleContent && articleContent[1]) {
-                  const cleanContent = articleContent[1].replace(/<[^>]*>/g, '');
-                  console.log('成功获取完整内容，长度:', cleanContent.length);
-                  content = cleanContent;
-                }
-              } catch (error) {
-                console.error('获取完整内容失败:', error);
-              }
-            }
 
             const { score, category } = this.calculateArticleScore(
               item.title || '',
               content
             );
-            return {
+
+            allArticles.push({
               title: item.title || '',
               content: content,
               link: item.link || item.guid,
@@ -163,10 +145,8 @@ class CrawlerService {
               score,
               category,
               source: source.name
-            };
-          });
-
-          allArticles.push(...scoredArticles);
+            });
+          }
         } catch (error) {
           console.error(`从 ${source.name} 抓取失败:`, error);
           continue;
@@ -186,8 +166,7 @@ class CrawlerService {
           if (!existingArticle) {
             console.log('准备翻译文章:', {
               title: article.title,
-              contentLength: article.content.length,
-              hasContent: !!article.content
+              contentLength: article.content.length
             });
 
             const translatedTitle = await this.translateText(article.title);
@@ -232,16 +211,7 @@ class CrawlerService {
 
   generateSummary(content) {
     if (!content) return '';
-    
-    // 移除 HTML 标签
     const plainText = content.replace(/<[^>]*>/g, '');
-    
-    // 如果内容少于200字符，直接返回
-    if (plainText.length <= 200) {
-      return plainText;
-    }
-    
-    // 否则返回前200字符
     return plainText.substring(0, 200) + '...';
   }
 
@@ -249,32 +219,36 @@ class CrawlerService {
     if (!text) return '';
     
     try {
-      const salt = Date.now();
-      const sign = md5(this.BAIDU_APP_ID + text + salt + this.BAIDU_SECRET);
-      
-      const response = await fetch('https://fanyi-api.baidu.com/api/trans/vip/translate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-          q: text,
-          from: 'en',
-          to: 'zh',
-          appid: this.BAIDU_APP_ID,
-          salt: salt,
-          sign: sign
-        })
+      const response = await this.openai.chat.completions.create({
+        model: "gpt-3.5-turbo-16k",
+        messages: [
+          {
+            role: "system",
+            content: "你是一个专业的翻译器。请直接将英文内容翻译成中文，保持原文的完整性，不要总结或改写。保留专业术语的准确性。"
+          },
+          {
+            role: "user",
+            content: `请将以下内容完整翻译成中文：\n${text}`
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 4000
       });
 
-      const result = await response.json();
-      if (result.trans_result) {
-        return result.trans_result.map(item => item.dst).join('\n');
-      }
-      
-      throw new Error(result.error_msg || '翻译失败');
+      return response.choices[0].message.content.trim();
     } catch (error) {
       console.error('翻译失败:', error);
+      
+      // 如果内容太长，尝试分段翻译
+      if (error.message.includes('maximum context length')) {
+        console.log('内容太长，尝试分段翻译');
+        const segments = this.splitTextIntoSegments(text, 3000);
+        const translatedSegments = await Promise.all(
+          segments.map(segment => this.translateText(segment))
+        );
+        return translatedSegments.join('\n');
+      }
+      
       throw error;
     }
   }
