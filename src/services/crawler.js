@@ -108,7 +108,8 @@ class CrawlerService {
   async crawl() {
     try {
       await this.loadRssSources();
-      console.log('开始抓取文章...');
+      console.log('\n============= 开始抓取文章 =============');
+      console.log('RSS源:', this.rssSources.map(s => s.name).join(', '));
       
       let allArticles = [];
       
@@ -116,16 +117,18 @@ class CrawlerService {
         try {
           console.log(`\n正在从 ${source.name} 抓取...`);
           const feed = await this.parser.parseURL(source.url);
+          console.log(`获取到 ${feed.items.length} 篇文章`);
           
           for (const item of feed.items) {
             try {
-              // 先获取原文内容，不进行翻译
+              console.log('\n处理文章:', item.title);
               const processedArticle = await this.processRssItem(item, source);
               if (processedArticle && processedArticle.content) {
-                // 计算分数仅用于排序
-                const scoreResult = this.calculateArticleScore(
-                  processedArticle.title
-                );
+                const scoreResult = this.calculateArticleScore(processedArticle.title);
+                console.log('文章评分:', {
+                  score: scoreResult.score,
+                  category: scoreResult.category
+                });
                 
                 allArticles.push({
                   ...processedArticle,
@@ -144,20 +147,19 @@ class CrawlerService {
         }
       }
 
-      // 只要有文章就选择分数最高的那篇，不管分数是多少
+      console.log(`\n候选文章数量: ${allArticles.length}`);
+
       if (allArticles.length > 0) {
         const selectedArticle = allArticles.sort((a, b) => b.score - a.score)[0];
-        console.log('选中分数最高的文章:', {
+        console.log('\n选中文章:', {
           title: selectedArticle.title,
           score: selectedArticle.score,
           category: selectedArticle.category
         });
 
-        // 检查文章是否已存在
         const existingArticle = await Article.findOne({ url: selectedArticle.link });
         if (!existingArticle) {
-          console.log('准备翻译选中的文章:', selectedArticle.title);
-          
+          console.log('\n开始翻译...');
           const translatedTitle = await this.translateText(selectedArticle.title);
           const translatedContent = await this.translateText(selectedArticle.content);
           const summary = this.generateSummary(selectedArticle.content);
@@ -173,14 +175,14 @@ class CrawlerService {
             category: selectedArticle.category
           });
 
-          console.log(`保存新文章成功: ${translatedTitle} (${selectedArticle.category})`);
+          console.log(`\n保存成功: ${translatedTitle}`);
           return [savedArticle];
         } else {
-          console.log(`文章已存在，跳过: ${selectedArticle.title}`);
+          console.log(`\n文章已存在，跳过: ${selectedArticle.title}`);
           return [];
         }
       } else {
-        console.log('没有找到任何文章');
+        console.log('\n没有找到任何文章');
         return [];
       }
     } catch (error) {
