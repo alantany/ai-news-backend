@@ -1,9 +1,9 @@
 const Parser = require('rss-parser');
-const Article = require('../models/Article');
 const { OpenAI } = require('openai');
-const Setting = require('../models/Setting');
-const fetch = require('node-fetch');
+const Article = require('../models/Article');
 const cheerio = require('cheerio');
+const fs = require('fs').promises;
+const path = require('path');
 
 class CrawlerService {
   constructor() {
@@ -20,160 +20,47 @@ class CrawlerService {
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: process.env.BASE_URL
     });
+  }
 
-    this.rssSources = [
-      {
+  async loadRssSources() {
+    try {
+      const rssListPath = path.join(__dirname, '../../rss_list.txt');
+      const content = await fs.readFile(rssListPath, 'utf-8');
+      const urls = content.split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('#')); // 忽略空行和注释
+
+      console.log('加载RSS源:', urls);
+      
+      this.rssSources = urls.map(url => ({
+        name: this.getRssSourceName(url),
+        url: url
+      }));
+    } catch (error) {
+      console.error('加载RSS源失败:', error);
+      // 使用默认值
+      this.rssSources = [{
         name: 'Towards Data Science',
         url: 'https://towardsdatascience.com/feed'
-      },
-      {
-        name: 'Microsoft AI Blog',
-        url: 'https://blogs.microsoft.com/ai/feed/'
-      },
-      {
-        name: 'TechCrunch AI',
-        url: 'https://techcrunch.com/tag/artificial-intelligence/feed/'
-      },
-      {
-        name: 'VentureBeat AI',
-        url: 'https://venturebeat.com/category/ai/feed/'
-      }
-    ];
-
-    // 定义文章类型及其关键词权重
-    this.articleCategories = {
-      RAG: {
-        weight: 100,
-        keywords: [
-          'RAG',
-          'Retrieval Augmented Generation',
-          'Retrieval-Augmented',
-          'Vector Database',
-          'Knowledge Base',
-          'Document Retrieval'
-        ]
-      },
-      LLM_DEV: {
-        weight: 80,
-        keywords: [
-          'Fine-tuning',
-          'Training',
-          'Model Development',
-          'LLM Architecture',
-          'Prompt Engineering',
-          'Model Optimization'
-        ]
-      },
-      LLM_NEWS: {
-        weight: 60,
-        keywords: [
-          'GPT',
-          'Claude',
-          'Gemini',
-          'LLaMA',
-          'Large Language Model',
-          'Foundation Model'
-        ]
-      },
-      GENERAL_AI: {
-        weight: 40,
-        keywords: [
-          'Artificial Intelligence',
-          'Machine Learning',
-          'Deep Learning',
-          'Neural Network',
-          'AI Application'
-        ]
-      }
-    };
-
-    this.BAIDU_APP_ID = process.env.BAIDU_APP_ID;
-    this.BAIDU_SECRET = process.env.BAIDU_SECRET;
-  }
-
-  calculateArticleScore(title, content) {
-    let maxScore = 0;
-    let category = 'GENERAL_AI';
-
-    // 将标题和内容合并为一个文本进行检索
-    const text = `${title} ${content}`.toLowerCase();
-
-    // 遍历每个分类的关键词
-    for (const [cat, config] of Object.entries(this.articleCategories)) {
-      for (const keyword of config.keywords) {
-        if (text.includes(keyword.toLowerCase())) {
-          const score = config.weight;
-          if (score > maxScore) {
-            maxScore = score;
-            category = cat;
-          }
-        }
-      }
-    }
-
-    return {
-      score: maxScore,
-      category
-    };
-  }
-
-  async fetchFullContent(url) {
-    try {
-      console.log('尝试获取完整文章内容:', url);
-      const response = await fetch(url);
-      const html = await response.text();
-      const $ = cheerio.load(html);
-      
-      // Medium 文章的主要内容通常在 article 标签内
-      let content = $('article').text();
-      
-      // 如果找不到 article 标签，尝试其他选择器
-      if (!content) {
-        content = $('.story-content').text() || 
-                 $('.article-content').text() || 
-                 $('main').text();
-      }
-      
-      return content;
-    } catch (error) {
-      console.error('获取完整内容失败:', error);
-      return null;
+      }];
     }
   }
 
-  cleanHtmlContent(content) {
-    if (!content) return '';
-    
-    try {
-      // 移除所有 HTML 标签
-      let cleanText = content.replace(/<[^>]*>/g, ' ');
-      
-      // 移除多余的空格
-      cleanText = cleanText.replace(/\s+/g, ' ');
-      
-      // 移除 Medium 特有的链接文本
-      cleanText = cleanText.replace(/Continue reading on.*?»/, '');
-      cleanText = cleanText.replace(/Towards Data Science.*?»/, '');
-      
-      // 移除图片链接
-      cleanText = cleanText.replace(/https:\/\/cdn-images-.*?\s/g, '');
-      
-      // 处理特殊字符
-      cleanText = cleanText.replace(/&nbsp;/g, ' ');
-      cleanText = cleanText.replace(/&amp;/g, '&');
-      cleanText = cleanText.replace(/&lt;/g, '<');
-      cleanText = cleanText.replace(/&gt;/g, '>');
-      
-      return cleanText.trim();
-    } catch (error) {
-      console.error('清理HTML内容失败:', error);
-      return content;
-    }
+  getRssSourceName(url) {
+    if (url.includes('towardsdatascience.com')) return 'Towards Data Science';
+    if (url.includes('blogs.microsoft.com')) return 'Microsoft AI Blog';
+    if (url.includes('techcrunch.com')) return 'TechCrunch AI';
+    return new URL(url).hostname;
   }
 
   async crawl() {
     try {
+      // 确保RSS源已加载
+      await this.loadRssSources();
+      
       console.log('开始抓取文章...');
+      console.log('RSS源列表:', this.rssSources);
+      
       let allArticles = [];
 
       for (const source of this.rssSources) {
@@ -286,6 +173,86 @@ class CrawlerService {
     } catch (error) {
       console.error('抓取文章失败:', error);
       throw error;
+    }
+  }
+
+  calculateArticleScore(title, content) {
+    let maxScore = 0;
+    let category = 'GENERAL_AI';
+
+    // 将标题和内容合并为一个文本进行检索
+    const text = `${title} ${content}`.toLowerCase();
+
+    // 遍历每个分类的关键词
+    for (const [cat, config] of Object.entries(this.articleCategories)) {
+      for (const keyword of config.keywords) {
+        if (text.includes(keyword.toLowerCase())) {
+          const score = config.weight;
+          if (score > maxScore) {
+            maxScore = score;
+            category = cat;
+          }
+        }
+      }
+    }
+
+    return {
+      score: maxScore,
+      category
+    };
+  }
+
+  async fetchFullContent(url) {
+    try {
+      console.log('尝试获取完整文章内容:', url);
+      const response = await fetch(url);
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      // Medium 文章的主要内容通常在 article 标签内
+      let content = $('article').text();
+      
+      // 如果找不到 article 标签，尝试其他选择器
+      if (!content) {
+        content = $('.story-content').text() || 
+                 $('.article-content').text() || 
+                 $('main').text();
+      }
+      
+      return content;
+    } catch (error) {
+      console.error('获取完整内容失败:', error);
+      return null;
+    }
+  }
+
+  cleanHtmlContent(content) {
+    if (!content) return '';
+    
+    try {
+      // 移除所有 HTML 标签
+      let cleanText = content.replace(/<[^>]*>/g, ' ');
+      
+      // 移除多余的空格
+      cleanText = cleanText.replace(/\s+/g, ' ');
+      
+      // 移除 Medium 特有的链接文本
+      cleanText = cleanText.replace(/Continue reading on.*?»/, '');
+      cleanText = cleanText.replace(/Towards Data Science.*?»/, '');
+      
+      // 移除图片链接
+      cleanText = cleanText.replace(/https:\/\/cdn-images-.*?\s/g, '');
+      
+      // 处理特殊字符
+      cleanText = cleanText.replace(/&nbsp;/g, ' ');
+      cleanText = cleanText.replace(/&amp;/g, '&');
+      cleanText = cleanText.replace(/&lt;/g, '<');
+      cleanText = cleanText.replace(/&gt;/g, '>');
+      
+      return cleanText.trim();
+    } catch (error) {
+      console.error('清理HTML内容失败:', error);
+      return content;
     }
   }
 

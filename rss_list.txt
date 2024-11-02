@@ -1,4 +1,13 @@
-'https://towardsdatascience.com/feed
+# 只抓取 Medium 的文章
+https://towardsdatascience.com/feed
+
+# 暂时不抓取的源
+# https://blogs.microsoft.com/ai/feed/
+# https://techcrunch.com/tag/artificial-intelligence/feed/
+# https://www.artificial-intelligence.blog/rss-feeds
+
+# 删除文档：curl -X POST https://rss.kids-coder.cn/api/admin/clear-articles
+# 触发抓取：curl -X POST https://rss.kids-coder.cn/api/admin/crawl
 
 
 
