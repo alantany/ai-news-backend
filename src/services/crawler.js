@@ -5,7 +5,7 @@ const cheerio = require('cheerio');
 const fs = require('fs').promises;
 const path = require('path');
 const Setting = require('../models/Setting');
-const translate = require('@vitalets/google-translate-api');
+const { translate } = require('@vitalets/google-translate-api');
 
 class CrawlerService {
   constructor() {
@@ -447,32 +447,10 @@ class CrawlerService {
     if (!text) return '';
     
     try {
-      const result = await translate(text, { to: 'zh-CN' });
-      return result.text;
+      const { text: translatedText } = await translate(text, { to: 'zh-CN' });
+      return translatedText;
     } catch (error) {
       console.error('翻译失败');
-      
-      // 如果文本太长，进行分段翻译
-      if (text.length > 5000) {
-        console.log('文本过长，进行分段翻译');
-        const segments = text.split(/(?<=[.!?])\s+/);
-        const translatedSegments = [];
-        
-        for (const segment of segments) {
-          try {
-            const result = await translate(segment, { to: 'zh-CN' });
-            translatedSegments.push(result.text);
-            // 添加短暂延迟避免请求过快
-            await new Promise(resolve => setTimeout(resolve, 100));
-          } catch (e) {
-            console.error('分段翻译失败');
-            continue;
-          }
-        }
-        
-        return translatedSegments.join('\n');
-      }
-      
       throw error;
     }
   }
