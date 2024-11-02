@@ -140,40 +140,56 @@ class CrawlerService {
         const savedArticles = [];
         for (let i = 0; i < Math.min(articlesPerSource, feed.items.length); i++) {
           const item = feed.items[i];
-          console.log(`\n[${i + 1}/${articlesPerSource}] 处理文章: ${item.title}`);
+          console.log(`\n[${i + 1}/${articlesPerSource}] 处理文章:`, item.title);
           
-          const processedArticle = await this.processRssItem(item, source);
-          if (!processedArticle || !processedArticle.content) {
-            console.log('处理失败，跳过');
+          try {
+            const processedArticle = await this.processRssItem(item, source);
+            if (!processedArticle || !processedArticle.content) {
+              console.log('处理失败，跳过');
+              continue;
+            }
+
+            const scoreResult = this.calculateArticleScore(processedArticle.title);
+            console.log('评分:', scoreResult.score);
+
+            const existingArticle = await Article.findOne({ url: processedArticle.link });
+            if (existingArticle) {
+              console.log('已存在，跳过');
+              continue;
+            }
+
+            // 将标题和内容拼接在一起，用特殊标记分隔
+            const combinedText = `[TITLE]${processedArticle.title}[/TITLE]\n\n${processedArticle.content}`;
+            
+            console.log('开始翻译...');
+            const translatedText = await this.translateText(combinedText);
+            
+            // 从翻译后的文本中提取标题和内容
+            const titleMatch = translatedText.match(/\[TITLE\](.*?)\[\/TITLE\]/);
+            const translatedTitle = titleMatch ? titleMatch[1].trim() : processedArticle.title;
+            const translatedContent = translatedText
+              .replace(/\[TITLE\].*?\[\/TITLE\]\s*/, '')  // 移除标题部分
+              .trim();
+            
+            // 从翻译后的内容中提取开头部分作为摘要
+            const translatedSummary = this.generateSummary(translatedContent);
+
+            const savedArticle = await Article.create({
+              title: translatedTitle,
+              content: translatedContent,
+              summary: translatedSummary,
+              source: processedArticle.source,
+              url: processedArticle.link,
+              publishDate: new Date(processedArticle.pubDate),
+              category: scoreResult.category
+            });
+
+            console.log('保存成功');
+            savedArticles.push(savedArticle);
+          } catch (error) {
+            console.error('处理文章失败:', error.message);
             continue;
           }
-
-          const scoreResult = this.calculateArticleScore(processedArticle.title);
-          console.log('评分:', scoreResult.score);
-
-          const existingArticle = await Article.findOne({ url: processedArticle.link });
-          if (existingArticle) {
-            console.log('已存在，跳过');
-            continue;
-          }
-
-          console.log('开始翻译...');
-          const translatedTitle = await this.translateText(processedArticle.title);
-          const translatedContent = await this.translateText(processedArticle.content);
-          const translatedSummary = this.generateSummary(translatedContent);
-
-          const savedArticle = await Article.create({
-            title: translatedTitle,
-            content: translatedContent,
-            summary: translatedSummary,
-            source: processedArticle.source,
-            url: processedArticle.link,
-            publishDate: new Date(processedArticle.pubDate),
-            category: scoreResult.category
-          });
-
-          console.log('保存成功');
-          savedArticles.push(savedArticle);
         }
 
         console.log(`\n本次共保存 ${savedArticles.length} 篇文章`);
@@ -491,10 +507,8 @@ class CrawlerService {
   }
 
   generateSummary(content) {
-    if (!content) return '';
-    // 直接截取前200个字符作为摘要
-    const plainText = content.replace(/<[^>]*>/g, '');
-    return plainText.substring(0, 200) + '...';
+    // 简单地截取前200个字符作为摘要
+    return content.substring(0, 200) + '...';
   }
 
   async translateText(text) {
