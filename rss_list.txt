@@ -4,11 +4,20 @@
 # Microsoft AI Blog（已处理好）
 # https://blogs.microsoft.com/ai/feed/
 
-# TechCrunch AI（处理困难，暂时移除）
-# https://techcrunch.com/tag/artificial-intelligence/feed/
+# OpenAI Blog
+https://openai.com/blog/rss.xml
 
-# VentureBeat AI
-https://venturebeat.com/category/ai/feed/
+# Google AI Blog
+https://blog.research.google/feeds/posts/default
+
+# Anthropic Blog
+https://www.anthropic.com/blog/rss.xml
+
+# VentureBeat AI（只有摘要，移除）
+# https://venturebeat.com/category/ai/feed/
+
+# DeepMind Blog
+https://deepmind.google/blog/feed/rss
 
 # 暂时不抓取的源
 # https://www.artificial-intelligence.blog/rss-feeds
