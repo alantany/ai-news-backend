@@ -109,85 +109,68 @@ class CrawlerService {
     try {
       await this.loadRssSources();
       console.log('\n============= 开始抓取文章 =============');
+      
+      if (!this.rssSources || this.rssSources.length === 0) {
+        console.error('没有找到可用的 RSS 源');
+        return [];
+      }
       console.log('RSS源:', this.rssSources.map(s => s.name).join(', '));
       
-      let allArticles = [];
+      // 只获取第一个源的文章
+      const source = this.rssSources[0];
+      console.log(`\n从 ${source.name} 抓取文章`);
       
-      for (const source of this.rssSources) {
-        try {
-          console.log(`\n正在从 ${source.name} 抓取...`);
-          const feed = await this.parser.parseURL(source.url);
-          console.log(`获取到 ${feed.items.length} 篇文章`);
-          
-          for (const item of feed.items) {
-            try {
-              console.log('\n处理文章:', item.title);
-              const processedArticle = await this.processRssItem(item, source);
-              if (processedArticle && processedArticle.content) {
-                const scoreResult = this.calculateArticleScore(processedArticle.title);
-                console.log('文章评分:', {
-                  score: scoreResult.score,
-                  category: scoreResult.category
-                });
-                
-                allArticles.push({
-                  ...processedArticle,
-                  score: scoreResult.score,
-                  category: scoreResult.category
-                });
-              }
-            } catch (error) {
-              console.error('处理单篇文章失败:', error);
-              continue;
-            }
-          }
-        } catch (error) {
-          console.error(`从 ${source.name} 抓取失败:`, error);
-          continue;
-        }
-      }
-
-      console.log(`\n候选文章数量: ${allArticles.length}`);
-
-      if (allArticles.length > 0) {
-        const selectedArticle = allArticles.sort((a, b) => b.score - a.score)[0];
-        console.log('\n选中文章:', {
-          title: selectedArticle.title,
-          score: selectedArticle.score,
-          category: selectedArticle.category
-        });
-
-        const existingArticle = await Article.findOne({ url: selectedArticle.link });
-        if (!existingArticle) {
-          console.log('\n开始翻译...');
-          const translatedTitle = await this.translateText(selectedArticle.title);
-          const translatedContent = await this.translateText(selectedArticle.content);
-          
-          // 从翻译后的内容生成摘要
-          const translatedSummary = this.generateSummary(translatedContent);
-
-          const savedArticle = await Article.create({
-            title: translatedTitle,
-            content: translatedContent,
-            summary: translatedSummary,  // 不需要再翻译了
-            source: selectedArticle.source,
-            url: selectedArticle.link,
-            publishDate: new Date(selectedArticle.pubDate),
-            category: selectedArticle.category
-          });
-
-          console.log(`\n保存成功: ${translatedTitle}`);
-          return [savedArticle];
-        } else {
-          console.log(`\n文章已存在，跳过: ${selectedArticle.title}`);
+      try {
+        const feed = await this.parser.parseURL(source.url);
+        console.log(`获取到 ${feed.items.length} 篇文章`);
+        
+        if (!feed.items || feed.items.length === 0) {
+          console.log('没有找到文章');
           return [];
         }
-      } else {
-        console.log('\n没有找到任何文章');
+
+        // 只处理第一篇文章
+        const item = feed.items[0];
+        console.log('\n处理文章:', item.title);
+        
+        const processedArticle = await this.processRssItem(item, source);
+        if (!processedArticle || !processedArticle.content) {
+          console.log('文章处理失败');
+          return [];
+        }
+
+        const scoreResult = this.calculateArticleScore(processedArticle.title);
+        console.log('文章评分:', scoreResult.score);
+
+        const existingArticle = await Article.findOne({ url: processedArticle.link });
+        if (existingArticle) {
+          console.log('文章已存在，跳过');
+          return [];
+        }
+
+        console.log('\n开始翻译...');
+        const translatedTitle = await this.translateText(processedArticle.title);
+        const translatedContent = await this.translateText(processedArticle.content);
+        const translatedSummary = this.generateSummary(translatedContent);
+
+        const savedArticle = await Article.create({
+          title: translatedTitle,
+          content: translatedContent,
+          summary: translatedSummary,
+          source: processedArticle.source,
+          url: processedArticle.link,
+          publishDate: new Date(processedArticle.pubDate),
+          category: scoreResult.category
+        });
+
+        console.log('\n保存成功:', translatedTitle);
+        return [savedArticle];
+      } catch (error) {
+        console.error(`抓取失败:`, error);
         return [];
       }
     } catch (error) {
-      console.error('抓取文章失败:', error);
+      console.error('抓取过程发生错误:', error);
       throw error;
     }
   }
