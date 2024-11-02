@@ -384,26 +384,71 @@ class CrawlerService {
     if (!content) return '';
     
     try {
-      // 移除所有 HTML 标签
-      let cleanText = content.replace(/<[^>]*>/g, ' ');
+      const $ = cheerio.load(content);
       
-      // 移除多余的空格
-      cleanText = cleanText.replace(/\s+/g, ' ');
+      // 处理代码块
+      $('pre, code').each((i, elem) => {
+        const code = $(elem).text().trim();
+        $(elem).replaceWith(`\n\n\`\`\`\n${code}\n\`\`\`\n\n`);
+      });
       
-      // 移除 Medium 特有的链接文本
-      cleanText = cleanText.replace(/Continue reading on.*?»/, '');
-      cleanText = cleanText.replace(/Towards Data Science.*?»/, '');
+      // 处理标题
+      $('h1, h2, h3, h4, h5, h6').each((i, elem) => {
+        const level = elem.name[1]; // 获取标题级别
+        const text = $(elem).text().trim();
+        const prefix = '#'.repeat(level);
+        $(elem).replaceWith(`\n\n${prefix} ${text}\n\n`);
+      });
       
-      // 移除图片链接
-      cleanText = cleanText.replace(/https:\/\/cdn-images-.*?\s/g, '');
+      // 处理段落
+      $('p').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text) {
+          $(elem).replaceWith(`\n\n${text}\n\n`);
+        }
+      });
       
-      // 处理特殊字符
-      cleanText = cleanText.replace(/&nbsp;/g, ' ');
-      cleanText = cleanText.replace(/&amp;/g, '&');
-      cleanText = cleanText.replace(/&lt;/g, '<');
-      cleanText = cleanText.replace(/&gt;/g, '>');
+      // 处理列表
+      $('ul, ol').each((i, elem) => {
+        const items = [];
+        $(elem).find('li').each((j, li) => {
+          const text = $(li).text().trim();
+          items.push(`• ${text}`);
+        });
+        $(elem).replaceWith(`\n\n${items.join('\n')}\n\n`);
+      });
       
-      return cleanText.trim();
+      // 处理引用
+      $('blockquote').each((i, elem) => {
+        const text = $(elem).text().trim();
+        $(elem).replaceWith(`\n\n> ${text}\n\n`);
+      });
+      
+      // 处理链接
+      $('a').each((i, elem) => {
+        const text = $(elem).text().trim();
+        const href = $(elem).attr('href');
+        if (text && href) {
+          $(elem).replaceWith(`[${text}](${href})`);
+        }
+      });
+      
+      // 获取处理后的文本
+      let cleanText = $.text();
+      
+      // 清理多余的空行和空格
+      cleanText = cleanText
+        .replace(/\n{3,}/g, '\n\n')  // 将多个空行减少为两个
+        .replace(/\s+/g, ' ')        // 将多个空格合并为一个
+        .trim();
+      
+      // 按段落重新格式化
+      const paragraphs = cleanText.split('\n\n');
+      const formattedParagraphs = paragraphs
+        .map(p => p.trim())
+        .filter(p => p);
+      
+      return formattedParagraphs.join('\n\n');
     } catch (error) {
       console.error('清理HTML内容失败:', error);
       return content;
@@ -425,11 +470,11 @@ class CrawlerService {
         messages: [
           {
             role: "system",
-            content: "你是一个专业的翻译器。请直接将英文内容翻译成中文，保持原文的完整性，不要总结或改写。保留专业术语的准确性。"
+            content: "你是一个专业的翻译器。请直接将英文内容翻译成中文，保持原文的格式和结构，包括标题、段落、代码块等。保留专业术语的准确性。对于代码块和技术名词，保持原样不翻译。"
           },
           {
             role: "user",
-            content: `请将以下内容完整翻译成中文：\n${text}`
+            content: `请将以下内容完整翻译成中文，保持原有格式：\n\n${text}`
           }
         ],
         temperature: 0.3,
@@ -440,14 +485,13 @@ class CrawlerService {
     } catch (error) {
       console.error('翻译失败:', error);
       
-      // 如果内容太长，尝试分段翻译
       if (error.message.includes('maximum context length')) {
         console.log('内容太长，尝试分段翻译');
         const segments = this.splitTextIntoSegments(text, 3000);
         const translatedSegments = await Promise.all(
           segments.map(segment => this.translateText(segment))
         );
-        return translatedSegments.join('\n');
+        return translatedSegments.join('\n\n');
       }
       
       throw error;
