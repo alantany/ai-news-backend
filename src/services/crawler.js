@@ -311,14 +311,26 @@ class CrawlerService {
   async processMicrosoftArticle(item) {
     console.log('处理 Microsoft 文章');
     try {
-      // Microsoft 博客通常在 content 字段包含完整内容
+      // Microsoft 博客的内容通常在 content 字段
       let content = item.content || '';
-      content = this.cleanHtmlContent(content);
       
-      if (!content && item.link) {
-        content = await this.fetchFullContent(item.link, 'microsoft');
+      // 如果 content 为空，尝试使用 description
+      if (!content) {
+        content = item.description || '';
       }
       
+      // 清理 HTML 内容
+      content = this.cleanHtmlContent(content);
+      
+      // 如果内容还是太短，尝试从原文链接获取
+      if (content.length < 500 && item.link) {
+        console.log('内容太短，尝试获取完整内容');
+        const fullContent = await this.fetchFullContent(item.link, 'microsoft');
+        if (fullContent && fullContent.length > content.length) {
+          content = fullContent;
+        }
+      }
+
       return content;
     } catch (error) {
       console.error('处理 Microsoft 文章失败:', error);
@@ -352,27 +364,26 @@ class CrawlerService {
     }
   }
 
-  async fetchFullContent(url, source) {
+  async fetchFullContent(url, source = 'microsoft') {
     try {
-      console.log('尝试获取完整文章内容:', url);
       const response = await fetch(url);
       const html = await response.text();
       const $ = cheerio.load(html);
       
-      // 根据不同源使用不同的选择器
-      switch (source) {
-        case 'medium':
-          return $('article').text() || $('.story-content').text();
-          
-        case 'microsoft':
-          return $('.article-content').text() || $('main').text();
-          
-        case 'techcrunch':
-          return $('.article-content').text() || $('.article__content').text();
-          
-        default:
-          return $('article').text() || $('main').text();
+      if (source === 'microsoft') {
+        // Microsoft 博客的主要内容选择器
+        let content = '';
+        
+        // 尝试不同的选择器
+        content = $('.article-content').text() || 
+                  $('.entry-content').text() || 
+                  $('main article').text() ||
+                  $('.post-content').text();
+        
+        return content;
       }
+      
+      return null;
     } catch (error) {
       console.error('获取完整内容失败:', error);
       return null;
