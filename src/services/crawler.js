@@ -124,7 +124,29 @@ class CrawlerService {
           
           // 处理每篇文章，添加分数和分类
           const scoredArticles = feed.items.map(item => {
-            const content = item.content || item.description || '';
+            const content = item.content || item.contentSnippet || item.description || '';
+            console.log('原文内容长度:', content.length);
+            console.log('原文内容预览:', content.substring(0, 100));
+
+            // 如果内容太短，尝试从 link 获取完整内容
+            if (content.length < 500 && item.link) {
+              try {
+                console.log('尝试从原文链接获取完整内容:', item.link);
+                const response = await fetch(item.link);
+                const html = await response.text();
+                // 这里需要根据不同网站的结构来提取文章内容
+                // 这只是一个简单的示例
+                const articleContent = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
+                if (articleContent && articleContent[1]) {
+                  const cleanContent = articleContent[1].replace(/<[^>]*>/g, '');
+                  console.log('成功获取完整内容，长度:', cleanContent.length);
+                  content = cleanContent;
+                }
+              } catch (error) {
+                console.error('获取完整内容失败:', error);
+              }
+            }
+
             const { score, category } = this.calculateArticleScore(
               item.title || '',
               content
