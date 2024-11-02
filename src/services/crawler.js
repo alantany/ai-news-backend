@@ -145,56 +145,58 @@ class CrawlerService {
       console.log('\n============= 开始抓取文章 =============');
       
       const settings = await Setting.findOne() || { preArticlesPerSource: 5 };
-      const articlesPerSource = settings.preArticlesPerSource || 5;
-      console.log(`每个源抓取数量: ${articlesPerSource}`);
+      const finalArticleCount = settings.preArticlesPerSource || 5;  // 最终要保存的文章数量
+      console.log(`计划保存文章数量: ${finalArticleCount}`);
       
       // 从所有源获取文章
       let allArticles = [];
       
+      // 遍历所有 RSS 源
       for (const source of this.rssSources) {
         try {
           console.log(`\n从 ${source.name} 抓取文章`);
           const feed = await this.parser.parseURL(source.url);
+          console.log(`获取到 ${feed.items.length} 篇文章`);
           
-          // 获取每个源的前 N 篇文章
-          const articles = feed.items.slice(0, articlesPerSource).map(item => ({
-            title: item.title,
-            content: item.content || item.description,
-            link: item.link,
-            pubDate: item.pubDate,
-            source: source.name
-          }));
-          
-          allArticles.push(...articles);
+          // 处理每篇文章
+          for (const item of feed.items) {
+            try {
+              const processedArticle = await this.processRssItem(item, source);
+              if (processedArticle && processedArticle.content) {
+                const scoreResult = this.calculateArticleScore(processedArticle.title);
+                allArticles.push({
+                  ...processedArticle,
+                  score: scoreResult.score,
+                  category: scoreResult.category
+                });
+              }
+            } catch (error) {
+              console.error('处理文章失败:', error.message);
+              continue;
+            }
+          }
         } catch (error) {
           console.error(`抓取 ${source.name} 失败:`, error.message);
           continue;
         }
       }
 
-      // 计算所有文章的分数
-      allArticles = allArticles.map(article => {
-        const scoreResult = this.calculateArticleScore(article.title);
-        return {
-          ...article,
-          score: scoreResult.score,
-          category: scoreResult.category
-        };
-      });
+      console.log(`\n总共获取到 ${allArticles.length} 篇文章`);
 
-      // 按分数排序并选择前 N 篇
-      const selectedArticles = allArticles
-        .sort((a, b) => b.score - a.score)
-        .slice(0, articlesPerSource);
+      // 按分数排序
+      allArticles.sort((a, b) => b.score - a.score);
 
-      console.log('\n文章分类统计:');
+      // 选择前N篇文章
+      const selectedArticles = allArticles.slice(0, finalArticleCount);
+
+      // 显示分类统计
       const categories = selectedArticles.reduce((acc, article) => {
         acc[article.category] = (acc[article.category] || 0) + 1;
         return acc;
       }, {});
-      console.log(categories);
+      console.log('\n选中文章分类统计:', categories);
 
-      // 处理选中的文章
+      // 保存选中的文章
       const savedArticles = [];
       for (const article of selectedArticles) {
         try {
@@ -231,7 +233,7 @@ class CrawlerService {
           console.log('保存成功:', translatedTitle);
           savedArticles.push(savedArticle);
         } catch (error) {
-          console.error('处理文章失败:', error.message);
+          console.error('保存文章失败:', error.message);
           continue;
         }
       }
