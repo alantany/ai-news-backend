@@ -162,13 +162,14 @@ class CrawlerService {
           console.log('\n开始翻译...');
           const translatedTitle = await this.translateText(selectedArticle.title);
           const translatedContent = await this.translateText(selectedArticle.content);
-          const summary = this.generateSummary(selectedArticle.content);
-          const translatedSummary = await this.translateText(summary);
+          
+          // 从翻译后的内容生成摘要
+          const translatedSummary = this.generateSummary(translatedContent);
 
           const savedArticle = await Article.create({
             title: translatedTitle,
             content: translatedContent,
-            summary: translatedSummary,
+            summary: translatedSummary,  // 不需要再翻译了
             source: selectedArticle.source,
             url: selectedArticle.link,
             publishDate: new Date(selectedArticle.pubDate),
@@ -460,6 +461,7 @@ class CrawlerService {
 
   generateSummary(content) {
     if (!content) return '';
+    // 直接截取前200个字符作为摘要
     const plainText = content.replace(/<[^>]*>/g, '');
     return plainText.substring(0, 200) + '...';
   }
@@ -474,22 +476,23 @@ class CrawlerService {
           {
             role: "system",
             content: `你是一个专业的中文翻译专家。请遵循以下规则：
-1. 将英文内容完整翻为中文
-2. 保持原文的格式和结构
-3. 技术术语的处理规则：
+1. 将英文内容完整翻译为中文
+2. 如果输入已经是中文，则直接返回，不要做任何修改
+3. 保持原文的格式和结构
+4. 技术术语的处理规则：
    - 首次出现时，保留英文原文并在括号中给出中文翻译
    - 后续出现时直接使用中文翻译
-4. 代码块内容保持原样不翻译
-5. 链接文本要翻译，但URL保持原样
-6. 不要添加任何解释或评论
-7. 保持专业性，避免口语化表达`
+5. 代码块内容保持原样不翻译
+6. 链接文本要翻译，但URL保持原样
+7. 不要添加任何解释或评论
+8. 保持专业性，避免口语化表达`
           },
           {
             role: "user",
-            content: `请按照上述规则翻译以下内容：\n\n${text}`
+            content: `请按照上述规则处理以下内容：\n\n${text}`
           }
         ],
-        temperature: 0.2,  // 降低随机性，使翻译更稳定
+        temperature: 0.2,
         max_tokens: 4000
       });
 
