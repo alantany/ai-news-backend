@@ -110,11 +110,6 @@ class CrawlerService {
       await this.loadRssSources();
       console.log('开始抓取文章...');
       
-      // 确保分类配置已初始化
-      if (!this.articleCategories) {
-        this.initializeCategories();
-      }
-      
       let allArticles = [];
       
       for (const source of this.rssSources) {
@@ -124,10 +119,10 @@ class CrawlerService {
           
           for (const item of feed.items) {
             try {
+              // 先获取原文内容，不进行翻译
               const processedArticle = await this.processRssItem(item, source);
               if (processedArticle && processedArticle.content) {
-                // 确保有内容后再计算分数
-                console.log('计算文章分数:', processedArticle.title);
+                // 计算分数仅用于排序
                 const scoreResult = this.calculateArticleScore(
                   processedArticle.title,
                   processedArticle.content
@@ -135,12 +130,6 @@ class CrawlerService {
                 
                 allArticles.push({
                   ...processedArticle,
-                  score: scoreResult.score,
-                  category: scoreResult.category
-                });
-                
-                console.log('文章处理完成:', {
-                  title: processedArticle.title,
                   score: scoreResult.score,
                   category: scoreResult.category
                 });
@@ -156,47 +145,45 @@ class CrawlerService {
         }
       }
 
-      // 修改这里，从之前的 5 篇改为 1 篇
-      const selectedArticles = allArticles
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 1);  // 只取分数最高的 1 篇
+      // 只要有文章就选择分数最高的那篇，不管分数是多少
+      if (allArticles.length > 0) {
+        const selectedArticle = allArticles.sort((a, b) => b.score - a.score)[0];
+        console.log('选中分数最高的文章:', {
+          title: selectedArticle.title,
+          score: selectedArticle.score,
+          category: selectedArticle.category
+        });
 
-      // 翻译并保存选中的文章
-      const savedArticles = [];
-      for (const article of selectedArticles) {
-        try {
-          const existingArticle = await Article.findOne({ url: article.link });
-          if (!existingArticle) {
-            console.log('准备翻译文章:', article.title);
-            
-            const translatedTitle = await this.translateText(article.title);
-            const translatedContent = await this.translateText(article.content);
-            const summary = this.generateSummary(article.content);
-            const translatedSummary = await this.translateText(summary);
+        // 检查文章是否已存在
+        const existingArticle = await Article.findOne({ url: selectedArticle.link });
+        if (!existingArticle) {
+          console.log('准备翻译选中的文章:', selectedArticle.title);
+          
+          const translatedTitle = await this.translateText(selectedArticle.title);
+          const translatedContent = await this.translateText(selectedArticle.content);
+          const summary = this.generateSummary(selectedArticle.content);
+          const translatedSummary = await this.translateText(summary);
 
-            const savedArticle = await Article.create({
-              title: translatedTitle,
-              content: translatedContent,
-              summary: translatedSummary,
-              source: article.source,
-              url: article.link,
-              publishDate: new Date(article.pubDate),
-              category: article.category
-            });
+          const savedArticle = await Article.create({
+            title: translatedTitle,
+            content: translatedContent,
+            summary: translatedSummary,
+            source: selectedArticle.source,
+            url: selectedArticle.link,
+            publishDate: new Date(selectedArticle.pubDate),
+            category: selectedArticle.category
+          });
 
-            console.log(`保存新文章成功: ${translatedTitle} (${article.category})`);
-            savedArticles.push(savedArticle);
-          } else {
-            console.log(`文章已存在，跳过: ${article.title}`);
-          }
-        } catch (error) {
-          console.error(`文章处理失败:`, error);
-          continue;
+          console.log(`保存新文章成功: ${translatedTitle} (${selectedArticle.category})`);
+          return [savedArticle];
+        } else {
+          console.log(`文章已存在，跳过: ${selectedArticle.title}`);
+          return [];
         }
+      } else {
+        console.log('没有找到任何文章');
+        return [];
       }
-
-      console.log(`\n本次抓取完成，成功保存 ${savedArticles.length} 篇文章`);
-      return savedArticles;
     } catch (error) {
       console.error('抓取文章失败:', error);
       throw error;
@@ -493,7 +480,7 @@ class CrawlerService {
           {
             role: "system",
             content: `你是一个专业的中文翻译专家。请遵循以下规则：
-1. 将英文内容完整翻译为中文
+1. 将英文内容完整翻��为中文
 2. 保持原文的格式和结构
 3. 技术术语的处理规则：
    - 首次出现时，保留英文原文并在括号中给出中文翻译
