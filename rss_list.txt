@@ -7,7 +7,7 @@
 
 
 # Google AI Blog
-https://blog.research.google/feeds/posts/default
+#https://blog.research.google/feeds/posts/default
 
 # Anthropic Blog
 https://www.anthropic.com/blog/rss.xml
@@ -15,11 +15,9 @@ https://www.anthropic.com/blog/rss.xml
 # VentureBeat AI（只有摘要，移除）
 # https://venturebeat.com/category/ai/feed/
 
-# DeepMind Blog
-https://deepmind.google/blog/feed/rss
 
 # 暂时不抓取的源
-# https://www.artificial-intelligence.blog/rss-feeds
+https://www.artificial-intelligence.blog/rss-feeds
 
 # 删除文档：curl -X POST https://rss.kids-coder.cn/api/admin/clear-articles
 # 触发抓取：curl -X POST https://rss.kids-coder.cn/api/admin/crawl
