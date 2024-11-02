@@ -158,10 +158,22 @@ class CrawlerService {
         try {
           const existingArticle = await Article.findOne({ url: article.link });
           if (!existingArticle) {
+            console.log('准备翻译文章:', {
+              title: article.title,
+              contentLength: article.content.length,
+              hasContent: !!article.content
+            });
+
             const translatedTitle = await this.translateText(article.title);
             const translatedContent = await this.translateText(article.content);
             const summary = this.generateSummary(article.content);
             const translatedSummary = await this.translateText(summary);
+
+            console.log('翻译完成:', {
+              titleLength: translatedTitle.length,
+              contentLength: translatedContent.length,
+              summaryLength: translatedSummary.length
+            });
 
             const savedArticle = await Article.create({
               title: translatedTitle,

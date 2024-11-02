@@ -66,11 +66,11 @@ router.get('/:id', async (req, res) => {
     if (!article) {
       return res.status(404).json({ message: '文章不存在' });
     }
-
-    // 增加浏览量
+    
+    // 更新浏览量
     article.views = (article.views || 0) + 1;
     await article.save();
-
+    
     res.json(article);
   } catch (error) {
     console.error('获取文章详情错误:', error);

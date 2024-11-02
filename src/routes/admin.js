@@ -3,6 +3,7 @@ const router = express.Router();
 const Admin = require('../models/Admin');
 const Setting = require('../models/Setting');
 const CrawlerService = require('../services/crawler');
+const Article = require('../models/Article');
 
 // 验证密码
 router.post('/password/verify', async (req, res) => {
@@ -77,6 +78,22 @@ router.post('/crawl', async (req, res) => {
     res.json({ message: '抓取成功', count: articles.length });
   } catch (error) {
     console.error('手动抓取错误:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 清理文章
+router.post('/clear-articles', async (req, res) => {
+  try {
+    console.log('收到清除文章请求');
+    const result = await Article.deleteMany({});
+    console.log(`清理完成，共删除 ${result.deletedCount} 篇文章`);
+    res.json({ 
+      message: '清理成功', 
+      deletedCount: result.deletedCount 
+    });
+  } catch (error) {
+    console.error('清理文章失败:', error);
     res.status(500).json({ message: error.message });
   }
 });

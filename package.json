@@ -4,7 +4,8 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "seed": "node src/scripts/seedData.js"
+    "seed": "node src/scripts/seedData.js",
+    "clear": "node src/scripts/clearArticles.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
