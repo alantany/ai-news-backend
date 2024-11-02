@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Article = require('../models/Article');
+const fetch = require('node-fetch');
 
 // 获取文章总数
 router.get('/count', async (req, res) => {
@@ -89,6 +90,65 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('获取文章详情错误:', error);
     res.status(500).json({ message: error.message });
+  }
+});
+
+// 修改代理路由
+router.get('/proxy/:id', async (req, res) => {
+  try {
+    const article = await Article.findById(req.params.id);
+    if (!article) {
+      return res.status(404).json({ message: '文章不存在' });
+    }
+
+    // 获取原文内容
+    const response = await fetch(article.url);
+    const html = await response.text();
+
+    // 构建一个新的 HTML 页面
+    const wrappedHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>${article.title}</title>
+          <style>
+            body {
+              padding: 16px;
+              font-size: 16px;
+              line-height: 1.6;
+            }
+            img {
+              max-width: 100%;
+              height: auto;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>${article.title}</h1>
+          <p>来源：${article.source}</p>
+          <div class="content">
+            ${html}
+          </div>
+        </body>
+      </html>
+    `;
+
+    // 设置正确的内容类型
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(wrappedHtml);
+  } catch (error) {
+    console.error('代理请求失败:', error);
+    res.status(500).send(`
+      <html>
+        <body>
+          <h1>加载失败</h1>
+          <p>${error.message}</p>
+          <p><a href="${article?.url}">点击访问原文</a></p>
+        </body>
+      </html>
+    `);
   }
 });
 
