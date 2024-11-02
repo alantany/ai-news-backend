@@ -248,10 +248,6 @@ class CrawlerService {
           
         case 'TechCrunch AI':
           content = await this.processTechCrunchArticle(item);
-          console.log('\n========= TechCrunch 文章原文 =========');
-          console.log(item.content || item.description);
-          console.log('\n========= 处理后的内容 =========');
-          console.log(content);
           break;
           
         default:
@@ -328,16 +324,46 @@ class CrawlerService {
   }
 
   async processTechCrunchArticle(item) {
-    console.log('处理 TechCrunch 文章');
     try {
-      // TechCrunch 通常需要从原文获取内容
-      let content = await this.fetchFullContent(item.link, 'techcrunch');
-      if (!content) {
-        content = item.content || item.description || '';
+      // TechCrunch RSS 只提供摘要，需要从原文链接获取完整内容
+      if (!item.link) {
+        console.log('没有找到文章链接');
+        return null;
       }
+
+      console.log('从原文获取完整内容');
+      const response = await fetch(item.link);
+      const html = await response.text();
+      const $ = cheerio.load(html);
+
+      // TechCrunch 文章内容选择器
+      let content = '';
+      
+      // 文章主体内容通常在这些选择器中
+      const articleSelectors = [
+        'article .article-content',
+        '.article__content',
+        '.article-body',
+        '.post-content',
+        '#article-container'
+      ];
+
+      for (const selector of articleSelectors) {
+        const element = $(selector);
+        if (element.length > 0) {
+          content = element.text();
+          break;
+        }
+      }
+
+      if (!content) {
+        console.log('无法获取文章内容');
+        return null;
+      }
+
       return this.cleanHtmlContent(content);
     } catch (error) {
-      console.error('处理 TechCrunch 文章失败:', error);
+      console.error('处理 TechCrunch 文章失败');
       return null;
     }
   }
