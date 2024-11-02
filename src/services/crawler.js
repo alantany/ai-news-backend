@@ -2,6 +2,7 @@ const Parser = require('rss-parser');
 const Article = require('../models/Article');
 const OpenAI = require('openai');
 const Setting = require('../models/Setting');
+const md5 = require('md5');
 
 class CrawlerService {
   constructor() {
@@ -84,6 +85,9 @@ class CrawlerService {
         ]
       }
     };
+
+    this.BAIDU_APP_ID = process.env.BAIDU_APP_ID;
+    this.BAIDU_SECRET = process.env.BAIDU_SECRET;
   }
 
   calculateArticleScore(title, content) {
@@ -245,27 +249,58 @@ class CrawlerService {
     if (!text) return '';
     
     try {
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "你是一个专业的中文翻译，需要将英文文章翻译成通顺的中文。保持专业术语的准确性。"
-          },
-          {
-            role: "user",
-            content: `请将以下内容翻译成中文：\n${text}`
-          }
-        ],
-        temperature: 0.3,
-        max_tokens: 1000
+      const salt = Date.now();
+      const sign = md5(this.BAIDU_APP_ID + text + salt + this.BAIDU_SECRET);
+      
+      const response = await fetch('https://fanyi-api.baidu.com/api/trans/vip/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          q: text,
+          from: 'en',
+          to: 'zh',
+          appid: this.BAIDU_APP_ID,
+          salt: salt,
+          sign: sign
+        })
       });
 
-      return response.choices[0].message.content.trim();
+      const result = await response.json();
+      if (result.trans_result) {
+        return result.trans_result.map(item => item.dst).join('\n');
+      }
+      
+      throw new Error(result.error_msg || '翻译失败');
     } catch (error) {
       console.error('翻译失败:', error);
-      return text; // 如果翻译失败，返回原文
+      throw error;
     }
+  }
+
+  // 添加分段方法
+  splitTextIntoSegments(text, maxLength) {
+    const segments = [];
+    let currentSegment = '';
+    
+    // 按句子分割
+    const sentences = text.split(/(?<=[.!?])\s+/);
+    
+    for (const sentence of sentences) {
+      if ((currentSegment + sentence).length > maxLength) {
+        segments.push(currentSegment);
+        currentSegment = sentence;
+      } else {
+        currentSegment += (currentSegment ? ' ' : '') + sentence;
+      }
+    }
+    
+    if (currentSegment) {
+      segments.push(currentSegment);
+    }
+    
+    return segments;
   }
 }
 
