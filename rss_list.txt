@@ -9,11 +9,9 @@
 # Google AI Blog
 #https://blog.research.google/feeds/posts/default
 
-# Anthropic Blog
-https://www.anthropic.com/blog/rss.xml
 
-# VentureBeat AI（只有摘要，移除）
-# https://venturebeat.com/category/ai/feed/
+
+
 
 
 # 暂时不抓取的源
