@@ -122,14 +122,18 @@ class CrawlerService {
 
       for (const source of this.rssSources) {
         try {
-          console.log(`正在从 ${source.name} 抓取...`);
+          console.log(`\n正在从 ${source.name} 抓取...`);
           const feed = await this.parser.parseURL(source.url);
           
-          // 处理每篇文章，添加分数和分类
           for (const item of feed.items) {
             const content = item.content || item.contentSnippet || item.description || '';
-            console.log('原文内容长度:', content.length);
-            console.log('原文内容预览:', content.substring(0, 100));
+            
+            // 打印原文详情
+            console.log('\n=================== 原文详情 ===================');
+            console.log('标题:', item.title);
+            console.log('内容长度:', content.length);
+            console.log('原文内容:\n', content);
+            console.log('===============================================\n');
 
             const { score, category } = this.calculateArticleScore(
               item.title || '',
@@ -163,21 +167,20 @@ class CrawlerService {
         try {
           const existingArticle = await Article.findOne({ url: article.link });
           if (!existingArticle) {
-            console.log('准备翻译文章:', {
-              title: article.title,
-              contentLength: article.content.length
-            });
+            console.log('\n=============== 开始翻译文章 ===============');
+            console.log('原文标题:', article.title);
+            console.log('原文内容:\n', article.content);
 
             const translatedTitle = await this.translateText(article.title);
             const translatedContent = await this.translateText(article.content);
             const summary = this.generateSummary(article.content);
             const translatedSummary = await this.translateText(summary);
 
-            console.log('翻译完成:', {
-              titleLength: translatedTitle.length,
-              contentLength: translatedContent.length,
-              summaryLength: translatedSummary.length
-            });
+            console.log('\n=============== 翻译结果 ===============');
+            console.log('翻译后标题:', translatedTitle);
+            console.log('翻译后内容:\n', translatedContent);
+            console.log('翻译后摘要:\n', translatedSummary);
+            console.log('=========================================\n');
 
             const savedArticle = await Article.create({
               title: translatedTitle,
@@ -200,7 +203,7 @@ class CrawlerService {
         }
       }
 
-      console.log(`本次抓取完成，成功保存 ${savedArticles.length} 篇文章`);
+      console.log(`\n本次抓取完成，成功保存 ${savedArticles.length} 篇文章`);
       return savedArticles;
     } catch (error) {
       console.error('抓取文章失败:', error);
