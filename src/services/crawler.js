@@ -254,14 +254,26 @@ class CrawlerService {
       switch (source.name) {
         case 'Towards Data Science':
           content = await this.processMediumArticle(item);
+          console.log('\n========= Medium 文章原文 =========');
+          console.log(item.content || item.contentSnippet || item.description || '');
+          console.log('\n========= 处理后的内容 =========');
+          console.log(content);
           break;
           
         case 'Microsoft AI Blog':
           content = await this.processMicrosoftArticle(item);
+          console.log('\n========= Microsoft 文章原文 =========');
+          console.log(item.content);
+          console.log('\n========= 处理后的内容 =========');
+          console.log(content);
           break;
           
         case 'TechCrunch AI':
           content = await this.processTechCrunchArticle(item);
+          console.log('\n========= TechCrunch 文章原文 =========');
+          console.log(item.content || item.description);
+          console.log('\n========= 处理后的内容 =========');
+          console.log(content);
           break;
           
         default:
@@ -273,9 +285,19 @@ class CrawlerService {
         return null;
       }
 
+      // 在翻译前后也添加日志
+      console.log('\n========= 翻译前的内容 =========');
+      console.log(content);
+      
+      const translatedTitle = await this.translateText(item.title);
+      const translatedContent = await this.translateText(content);
+      
+      console.log('\n========= 翻译后的内容 =========');
+      console.log(translatedContent);
+
       return {
-        title: item.title || '',
-        content: content,
+        title: translatedTitle,
+        content: translatedContent,
         link: item.link,
         pubDate: item.pubDate || item.isoDate,
         source: source.name
@@ -470,14 +492,23 @@ class CrawlerService {
         messages: [
           {
             role: "system",
-            content: "你是一个专业的翻译器。请直接将英文内容翻译成中文，保持原文的格式和结构，包括标题、段落、代码块等。保留专业术语的准确性。对于代码块和技术名词，保持原样不翻译。"
+            content: `你是一个专业的中文翻译专家。请遵循以下规则：
+1. 将英文内容完整翻译为中文
+2. 保持原文的格式和结构
+3. 技术术语的处理规则：
+   - 首次出现时，保留英文原文并在括号中给出中文翻译
+   - 后续出现时直接使用中文翻译
+4. 代码块内容保持原样不翻译
+5. 链接文本要翻译，但URL保持原样
+6. 不要添加任何解释或评论
+7. 保持专业性，避免口语化表达`
           },
           {
             role: "user",
-            content: `请将以下内容完整翻译成中文，保持原有格式：\n\n${text}`
+            content: `请按照上述规则翻译以下内容：\n\n${text}`
           }
         ],
-        temperature: 0.3,
+        temperature: 0.2,  // 降低随机性，使翻译更稳定
         max_tokens: 4000
       });
 
