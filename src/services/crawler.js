@@ -446,71 +446,67 @@ class CrawlerService {
     if (!text) return '';
     
     try {
+      // 限制输入长度，确保不超过4000个字符
+      const maxLength = 4000;
+      if (text.length > maxLength) {
+        console.log('文本超长，进行分段翻译');
+        return this.translateLongText(text, maxLength);
+      }
+
       const response = await this.openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
           {
             role: "system",
-            content: `你是一个专业的中文翻译专家。请遵循以下规则：
-1. 将英文内容完整翻译为中文
-2. 如果输入已经是中文，则直接返回，不要做任何修改
-3. 保持原文的格式和结构
-4. 技术术语的处理规则：
-   - 首次出现时，保留英文原文并在括号中给出中文翻译
-   - 后续出现时直接使用中文翻译
-5. 代码块内容保持原样不翻译
-6. 链接文本要翻译，但URL保持原样
-7. 不要添加任何解释或评论
-8. 保持专业性，避免口语化表达`
+            content: "你是一个专业的中文翻译专家。请将英文翻译为中文，保持专业术语的准确性。"
           },
           {
             role: "user",
-            content: `请按照上述规则处理以下内容：\n\n${text}`
+            content: `请翻译以下内容：\n\n${text}`
           }
         ],
         temperature: 0.2,
-        max_tokens: 2000
+        max_tokens: 1000
       });
 
       return response.choices[0].message.content.trim();
     } catch (error) {
       console.error('翻译失败');
-      
-      if (error.message.includes('maximum context length')) {
-        console.log('内容太长，尝试分段翻译');
-        const segments = this.splitTextIntoSegments(text, 1500);
-        const translatedSegments = await Promise.all(
-          segments.map(segment => this.translateText(segment))
-        );
-        return translatedSegments.join('\n\n');
-      }
-      
       throw error;
     }
   }
 
-  // 添加分段方法
-  splitTextIntoSegments(text, maxLength) {
-    const segments = [];
-    let currentSegment = '';
-    
-    // 按句子分割
-    const sentences = text.split(/(?<=[.!?])\s+/);
-    
-    for (const sentence of sentences) {
-      if ((currentSegment + sentence).length > maxLength) {
-        segments.push(currentSegment);
-        currentSegment = sentence;
-      } else {
-        currentSegment += (currentSegment ? ' ' : '') + sentence;
+  async translateLongText(text, maxLength) {
+    try {
+      // 按句子分段
+      const segments = text.split(/(?<=[.!?])\s+/);
+      let currentSegment = '';
+      let translatedParts = [];
+
+      for (const sentence of segments) {
+        if ((currentSegment + sentence).length > maxLength) {
+          // 当前段已满，翻译并开始新段
+          if (currentSegment) {
+            const translatedPart = await this.translateText(currentSegment);
+            translatedParts.push(translatedPart);
+          }
+          currentSegment = sentence;
+        } else {
+          currentSegment += (currentSegment ? ' ' : '') + sentence;
+        }
       }
+
+      // 翻译最后一段
+      if (currentSegment) {
+        const translatedPart = await this.translateText(currentSegment);
+        translatedParts.push(translatedPart);
+      }
+
+      return translatedParts.join('\n\n');
+    } catch (error) {
+      console.error('分段翻译失败');
+      throw error;
     }
-    
-    if (currentSegment) {
-      segments.push(currentSegment);
-    }
-    
-    return segments;
   }
 }
 
