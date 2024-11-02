@@ -15,7 +15,8 @@
     "rss-parser": "^3.13.0",
     "node-fetch": "^2.6.1",
     "openai": "^4.0.0",
-    "node-cron": "^3.0.2"
+    "node-cron": "^3.0.2",
+    "cheerio": "^1.0.0-rc.12"
   },
   "engines": {
     "node": ">=16.0.0"
