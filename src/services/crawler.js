@@ -129,42 +129,48 @@ class CrawlerService {
           return [];
         }
 
-        // 只处理第一篇文章
-        const item = feed.items[0];
-        console.log('\n处理文章:', item.title);
-        
-        const processedArticle = await this.processRssItem(item, source);
-        if (!processedArticle || !processedArticle.content) {
-          console.log('文章处理失败');
-          return [];
+        // 处理前5篇文章
+        const savedArticles = [];
+        for (let i = 0; i < Math.min(5, feed.items.length); i++) {
+          const item = feed.items[i];
+          console.log(`\n处理第 ${i + 1} 篇文章:`, item.title);
+          
+          const processedArticle = await this.processRssItem(item, source);
+          if (!processedArticle || !processedArticle.content) {
+            console.log('文章处理失败，跳过');
+            continue;
+          }
+
+          const scoreResult = this.calculateArticleScore(processedArticle.title);
+          console.log('文章评分:', scoreResult.score);
+
+          const existingArticle = await Article.findOne({ url: processedArticle.link });
+          if (existingArticle) {
+            console.log('文章已存在，跳过');
+            continue;
+          }
+
+          console.log('开始翻译...');
+          const translatedTitle = await this.translateText(processedArticle.title);
+          const translatedContent = await this.translateText(processedArticle.content);
+          const translatedSummary = this.generateSummary(translatedContent);
+
+          const savedArticle = await Article.create({
+            title: translatedTitle,
+            content: translatedContent,
+            summary: translatedSummary,
+            source: processedArticle.source,
+            url: processedArticle.link,
+            publishDate: new Date(processedArticle.pubDate),
+            category: scoreResult.category
+          });
+
+          console.log('保存成功:', translatedTitle);
+          savedArticles.push(savedArticle);
         }
 
-        const scoreResult = this.calculateArticleScore(processedArticle.title);
-        console.log('文章评分:', scoreResult.score);
-
-        const existingArticle = await Article.findOne({ url: processedArticle.link });
-        if (existingArticle) {
-          console.log('文章已存在，跳过');
-          return [];
-        }
-
-        console.log('\n开始翻译...');
-        const translatedTitle = await this.translateText(processedArticle.title);
-        const translatedContent = await this.translateText(processedArticle.content);
-        const translatedSummary = this.generateSummary(translatedContent);
-
-        const savedArticle = await Article.create({
-          title: translatedTitle,
-          content: translatedContent,
-          summary: translatedSummary,
-          source: processedArticle.source,
-          url: processedArticle.link,
-          publishDate: new Date(processedArticle.pubDate),
-          category: scoreResult.category
-        });
-
-        console.log('\n保存成功:', translatedTitle);
-        return [savedArticle];
+        console.log(`\n本次共保存 ${savedArticles.length} 篇文章`);
+        return savedArticles;
       } catch (error) {
         console.error(`抓取失败:`, error);
         return [];
