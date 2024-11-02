@@ -110,6 +110,11 @@ class CrawlerService {
       await this.loadRssSources();
       console.log('开始抓取文章...');
       
+      // 确保分类配置已初始化
+      if (!this.articleCategories) {
+        this.initializeCategories();
+      }
+      
       let allArticles = [];
       
       for (const source of this.rssSources) {
@@ -118,17 +123,31 @@ class CrawlerService {
           const feed = await this.parser.parseURL(source.url);
           
           for (const item of feed.items) {
-            const processedArticle = await this.processRssItem(item, source);
-            if (processedArticle) {
-              const { score, category } = this.calculateArticleScore(
-                processedArticle.title,
-                processedArticle.content
-              );
-              allArticles.push({
-                ...processedArticle,
-                score,
-                category
-              });
+            try {
+              const processedArticle = await this.processRssItem(item, source);
+              if (processedArticle && processedArticle.content) {
+                // 确保有内容后再计算分数
+                console.log('计算文章分数:', processedArticle.title);
+                const scoreResult = this.calculateArticleScore(
+                  processedArticle.title,
+                  processedArticle.content
+                );
+                
+                allArticles.push({
+                  ...processedArticle,
+                  score: scoreResult.score,
+                  category: scoreResult.category
+                });
+                
+                console.log('文章处理完成:', {
+                  title: processedArticle.title,
+                  score: scoreResult.score,
+                  category: scoreResult.category
+                });
+              }
+            } catch (error) {
+              console.error('处理单篇文章失败:', error);
+              continue;
             }
           }
         } catch (error) {
@@ -148,20 +167,12 @@ class CrawlerService {
         try {
           const existingArticle = await Article.findOne({ url: article.link });
           if (!existingArticle) {
-            console.log('\n=============== 开始翻译文章 ===============');
-            console.log('原文标题:', article.title);
-            console.log('原文内容:\n', article.content);
-
+            console.log('准备翻译文章:', article.title);
+            
             const translatedTitle = await this.translateText(article.title);
             const translatedContent = await this.translateText(article.content);
             const summary = this.generateSummary(article.content);
             const translatedSummary = await this.translateText(summary);
-
-            console.log('\n=============== 翻译结果 ===============');
-            console.log('翻译后标题:', translatedTitle);
-            console.log('翻译后内容:\n', translatedContent);
-            console.log('翻译后摘要:\n', translatedSummary);
-            console.log('=========================================\n');
 
             const savedArticle = await Article.create({
               title: translatedTitle,
@@ -173,7 +184,7 @@ class CrawlerService {
               category: article.category
             });
 
-            console.log(`保存新文章: ${translatedTitle} (${article.category})`);
+            console.log(`保存新文章成功: ${translatedTitle} (${article.category})`);
             savedArticles.push(savedArticle);
           } else {
             console.log(`文章已存在，跳过: ${article.title}`);
