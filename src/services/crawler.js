@@ -20,6 +20,53 @@ class CrawlerService {
       apiKey: process.env.OPENAI_API_KEY,
       baseURL: process.env.BASE_URL
     });
+
+    // 定义文章类型及其关键词权重
+    this.articleCategories = {
+      RAG: {
+        weight: 100,
+        keywords: [
+          'RAG',
+          'Retrieval Augmented Generation',
+          'Retrieval-Augmented',
+          'Vector Database',
+          'Knowledge Base',
+          'Document Retrieval'
+        ]
+      },
+      LLM_DEV: {
+        weight: 80,
+        keywords: [
+          'Fine-tuning',
+          'Training',
+          'Model Development',
+          'LLM Architecture',
+          'Prompt Engineering',
+          'Model Optimization'
+        ]
+      },
+      LLM_NEWS: {
+        weight: 60,
+        keywords: [
+          'GPT',
+          'Claude',
+          'Gemini',
+          'LLaMA',
+          'Large Language Model',
+          'Foundation Model'
+        ]
+      },
+      GENERAL_AI: {
+        weight: 40,
+        keywords: [
+          'Artificial Intelligence',
+          'Machine Learning',
+          'Deep Learning',
+          'Neural Network',
+          'AI Application'
+        ]
+      }
+    };
   }
 
   async loadRssSources() {
@@ -55,63 +102,27 @@ class CrawlerService {
 
   async crawl() {
     try {
-      // 确保RSS源已加载
       await this.loadRssSources();
-      
       console.log('开始抓取文章...');
-      console.log('RSS源列表:', this.rssSources);
       
       let allArticles = [];
-
+      
       for (const source of this.rssSources) {
         try {
           console.log(`\n正在从 ${source.name} 抓取...`);
           const feed = await this.parser.parseURL(source.url);
           
           for (const item of feed.items) {
-            // 对 Medium 文章进行特殊处理
-            if (item.link && item.link.includes('towardsdatascience.com')) {
-              console.log('检测到 Medium 文章，获取完整内容:', item.link);
-              
-              // 首先尝试获取完整内容
-              let content = '';
-              try {
-                content = await this.fetchFullContent(item.link);
-                console.log('获取到完整内容长度:', content ? content.length : 0);
-              } catch (error) {
-                console.error('获取完整内容失败，使用RSS内容:', error);
-                content = item.content || item.contentSnippet || item.description || '';
-              }
-
-              // 清理内容
-              content = this.cleanHtmlContent(content);
-              
-              // 如果内容太短，使用RSS中的内容作为备选
-              if (!content || content.length < 500) {
-                console.log('获取的内容太短，使用RSS内容');
-                const rssContent = item.content || item.contentSnippet || item.description || '';
-                content = this.cleanHtmlContent(rssContent);
-              }
-
-              console.log('\n=================== 文章详情 ===================');
-              console.log('标题:', item.title);
-              console.log('内容长度:', content.length);
-              console.log('处理后的内容:\n', content);
-              console.log('===============================================\n');
-
+            const processedArticle = await this.processRssItem(item, source);
+            if (processedArticle) {
               const { score, category } = this.calculateArticleScore(
-                item.title || '',
-                content
+                processedArticle.title,
+                processedArticle.content
               );
-
               allArticles.push({
-                title: item.title || '',
-                content: content,
-                link: item.link,
-                pubDate: item.pubDate || item.isoDate,
+                ...processedArticle,
                 score,
-                category,
-                source: source.name
+                category
               });
             }
           }
@@ -176,50 +187,176 @@ class CrawlerService {
     }
   }
 
-  calculateArticleScore(title, content) {
-    let maxScore = 0;
-    let category = 'GENERAL_AI';
+  calculateArticleScore(title = '', content = '') {
+    try {
+      let maxScore = 0;
+      let category = 'GENERAL_AI';
 
-    // 将标题和内容合并为一个文本进行检索
-    const text = `${title} ${content}`.toLowerCase();
+      // 将标题和内容合并为一个文本进行检索
+      const text = `${title} ${content}`.toLowerCase();
 
-    // 遍历每个分类的关键词
-    for (const [cat, config] of Object.entries(this.articleCategories)) {
-      for (const keyword of config.keywords) {
-        if (text.includes(keyword.toLowerCase())) {
-          const score = config.weight;
-          if (score > maxScore) {
-            maxScore = score;
-            category = cat;
+      // 遍历每个分类的关键词
+      for (const [cat, config] of Object.entries(this.articleCategories)) {
+        for (const keyword of config.keywords) {
+          if (text.includes(keyword.toLowerCase())) {
+            const score = config.weight;
+            if (score > maxScore) {
+              maxScore = score;
+              category = cat;
+            }
           }
         }
       }
-    }
 
-    return {
-      score: maxScore,
-      category
-    };
+      console.log('文章评分结果:', {
+        title: title.substring(0, 50) + '...',
+        score: maxScore,
+        category
+      });
+
+      return {
+        score: maxScore,
+        category
+      };
+    } catch (error) {
+      console.error('计算文章分数失败:', error);
+      return {
+        score: 0,
+        category: 'GENERAL_AI'
+      };
+    }
   }
 
-  async fetchFullContent(url) {
+  async processRssItem(item, source) {
+    try {
+      console.log(`\n处理来自 ${source.name} 的文章:`, item.title);
+      
+      let content = '';
+      
+      // 根据不同的源使用不同的处理逻辑
+      switch (source.name) {
+        case 'Towards Data Science':
+          content = await this.processMediumArticle(item);
+          break;
+          
+        case 'Microsoft AI Blog':
+          content = await this.processMicrosoftArticle(item);
+          break;
+          
+        case 'TechCrunch AI':
+          content = await this.processTechCrunchArticle(item);
+          break;
+          
+        default:
+          content = await this.processDefaultArticle(item);
+      }
+
+      if (!content) {
+        console.log('无法获取有效内容，跳过此文章');
+        return null;
+      }
+
+      return {
+        title: item.title || '',
+        content: content,
+        link: item.link,
+        pubDate: item.pubDate || item.isoDate,
+        source: source.name
+      };
+    } catch (error) {
+      console.error('处理文章失败:', error);
+      return null;
+    }
+  }
+
+  async processMediumArticle(item) {
+    console.log('处理 Medium 文章');
+    try {
+      // Medium 文章需要特殊处理
+      let content = item.content || item.contentSnippet || item.description || '';
+      content = this.cleanHtmlContent(content);
+      
+      // 如果内容太短，尝试获取完整内容
+      if (content.length < 500 && item.link) {
+        console.log('Medium 文章内容太短，尝试获取完整内容');
+        const fullContent = await this.fetchFullContent(item.link, 'medium');
+        if (fullContent && fullContent.length > content.length) {
+          content = fullContent;
+        }
+      }
+      
+      return content;
+    } catch (error) {
+      console.error('处理 Medium 文章失败:', error);
+      return null;
+    }
+  }
+
+  async processMicrosoftArticle(item) {
+    console.log('处理 Microsoft 文章');
+    try {
+      // Microsoft 博客通常在 content 字段包含完整内容
+      let content = item.content || '';
+      content = this.cleanHtmlContent(content);
+      
+      if (!content && item.link) {
+        content = await this.fetchFullContent(item.link, 'microsoft');
+      }
+      
+      return content;
+    } catch (error) {
+      console.error('处理 Microsoft 文章失败:', error);
+      return null;
+    }
+  }
+
+  async processTechCrunchArticle(item) {
+    console.log('处理 TechCrunch 文章');
+    try {
+      // TechCrunch 通常需要从原文获取内容
+      let content = await this.fetchFullContent(item.link, 'techcrunch');
+      if (!content) {
+        content = item.content || item.description || '';
+      }
+      return this.cleanHtmlContent(content);
+    } catch (error) {
+      console.error('处理 TechCrunch 文章失败:', error);
+      return null;
+    }
+  }
+
+  async processDefaultArticle(item) {
+    console.log('使用默认处理方式');
+    try {
+      let content = item.content || item.contentSnippet || item.description || '';
+      return this.cleanHtmlContent(content);
+    } catch (error) {
+      console.error('处理文章失败:', error);
+      return null;
+    }
+  }
+
+  async fetchFullContent(url, source) {
     try {
       console.log('尝试获取完整文章内容:', url);
       const response = await fetch(url);
       const html = await response.text();
       const $ = cheerio.load(html);
       
-      // Medium 文章的主要内容通常在 article 标签内
-      let content = $('article').text();
-      
-      // 如果找不到 article 标签，尝试其他选择器
-      if (!content) {
-        content = $('.story-content').text() || 
-                 $('.article-content').text() || 
-                 $('main').text();
+      // 根据不同源使用不同的选择器
+      switch (source) {
+        case 'medium':
+          return $('article').text() || $('.story-content').text();
+          
+        case 'microsoft':
+          return $('.article-content').text() || $('main').text();
+          
+        case 'techcrunch':
+          return $('.article-content').text() || $('.article__content').text();
+          
+        default:
+          return $('article').text() || $('main').text();
       }
-      
-      return content;
     } catch (error) {
       console.error('获取完整内容失败:', error);
       return null;
