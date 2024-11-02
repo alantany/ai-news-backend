@@ -21,7 +21,11 @@ class CrawlerService {
       baseURL: process.env.BASE_URL
     });
 
-    // 定义文章类型及其关键词权重
+    this.initializeCategories();
+  }
+
+  initializeCategories() {
+    console.log('初始化文章分类配置');
     this.articleCategories = {
       RAG: {
         weight: 100,
@@ -67,6 +71,7 @@ class CrawlerService {
         ]
       }
     };
+    console.log('分类配置初始化完成');
   }
 
   async loadRssSources() {
@@ -189,15 +194,22 @@ class CrawlerService {
 
   calculateArticleScore(title = '', content = '') {
     try {
+      console.log('开始计算文章分数');
+      console.log('articleCategories 是否存在:', !!this.articleCategories);
+      
+      // 确保 articleCategories 已初始化
+      if (!this.articleCategories) {
+        console.log('articleCategories 未初始化，重新初始化');
+        this.initializeCategories();
+      }
+
       let maxScore = 0;
       let category = 'GENERAL_AI';
 
-      // 将标题和内容合并为一个文本进行检索
       const text = `${title} ${content}`.toLowerCase();
-
-      // 遍历每个分类的关键词
-      for (const [cat, config] of Object.entries(this.articleCategories)) {
-        for (const keyword of config.keywords) {
+      
+      Object.entries(this.articleCategories).forEach(([cat, config]) => {
+        config.keywords.forEach(keyword => {
           if (text.includes(keyword.toLowerCase())) {
             const score = config.weight;
             if (score > maxScore) {
@@ -205,8 +217,8 @@ class CrawlerService {
               category = cat;
             }
           }
-        }
-      }
+        });
+      });
 
       console.log('文章评分结果:', {
         title: title.substring(0, 50) + '...',
@@ -214,16 +226,10 @@ class CrawlerService {
         category
       });
 
-      return {
-        score: maxScore,
-        category
-      };
+      return { score: maxScore, category };
     } catch (error) {
       console.error('计算文章分数失败:', error);
-      return {
-        score: 0,
-        category: 'GENERAL_AI'
-      };
+      return { score: 0, category: 'GENERAL_AI' };
     }
   }
 
