@@ -124,18 +124,17 @@ class CrawlerService {
       const html = await response.text();
       const $ = cheerio.load(html);
       
-      // 根据不同网站的结构提取文章内容
-      // Microsoft Blog
-      if (url.includes('blogs.microsoft.com')) {
-        return $('article').text() || $('main').text();
-      }
-      // TechCrunch
-      if (url.includes('techcrunch.com')) {
-        return $('.article-content').text();
-      }
-      // 其他网站可以添加相应的提取规则
+      // Medium 文章的主要内容通常在 article 标签内
+      let content = $('article').text();
       
-      return null;
+      // 如果找不到 article 标签，尝试其他选择器
+      if (!content) {
+        content = $('.story-content').text() || 
+                 $('.article-content').text() || 
+                 $('main').text();
+      }
+      
+      return content;
     } catch (error) {
       console.error('获取完整内容失败:', error);
       return null;
@@ -183,47 +182,51 @@ class CrawlerService {
           const feed = await this.parser.parseURL(source.url);
           
           for (const item of feed.items) {
-            let content = item.content || item.contentSnippet || item.description || '';
-            
             // 对 Medium 文章进行特殊处理
             if (item.link && item.link.includes('towardsdatascience.com')) {
-              console.log('检测到 Medium 文章，进行特殊处理');
+              console.log('检测到 Medium 文章，获取完整内容:', item.link);
+              
+              // 首先尝试获取完整内容
+              let content = '';
+              try {
+                content = await this.fetchFullContent(item.link);
+                console.log('获取到完整内容长度:', content ? content.length : 0);
+              } catch (error) {
+                console.error('获取完整内容失败，使用RSS内容:', error);
+                content = item.content || item.contentSnippet || item.description || '';
+              }
+
+              // 清理内容
               content = this.cleanHtmlContent(content);
               
-              // 如果内容太短，可能是预览，尝试获取更多内容
-              if (content.length < 500) {
-                console.log('Medium 文章内容太短，尝试获取完整内容');
-                try {
-                  const fullContent = await this.fetchFullContent(item.link);
-                  if (fullContent && fullContent.length > content.length) {
-                    content = fullContent;
-                  }
-                } catch (error) {
-                  console.error('获取 Medium 完整内容失败:', error);
-                }
+              // 如果内容太短，使用RSS中的内容作为备选
+              if (!content || content.length < 500) {
+                console.log('获取的内容太短，使用RSS内容');
+                const rssContent = item.content || item.contentSnippet || item.description || '';
+                content = this.cleanHtmlContent(rssContent);
               }
+
+              console.log('\n=================== 文章详情 ===================');
+              console.log('标题:', item.title);
+              console.log('内容长度:', content.length);
+              console.log('处理后的内容:\n', content);
+              console.log('===============================================\n');
+
+              const { score, category } = this.calculateArticleScore(
+                item.title || '',
+                content
+              );
+
+              allArticles.push({
+                title: item.title || '',
+                content: content,
+                link: item.link,
+                pubDate: item.pubDate || item.isoDate,
+                score,
+                category,
+                source: source.name
+              });
             }
-            
-            console.log('\n=================== 原文详情 ===================');
-            console.log('标题:', item.title);
-            console.log('内容长度:', content.length);
-            console.log('清理后的内容:\n', content);
-            console.log('===============================================\n');
-
-            const { score, category } = this.calculateArticleScore(
-              item.title || '',
-              content
-            );
-
-            allArticles.push({
-              title: item.title || '',
-              content: content,
-              link: item.link || item.guid,
-              pubDate: item.pubDate || item.isoDate,
-              score,
-              category,
-              source: source.name
-            });
           }
         } catch (error) {
           console.error(`从 ${source.name} 抓取失败:`, error);
