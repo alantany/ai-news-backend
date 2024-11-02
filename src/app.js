@@ -1,8 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/database');
+const cron = require('node-cron');
 require('dotenv').config();
-const path = require('path');
 
 const app = express();
 
@@ -15,16 +15,22 @@ app.use(cors({
 
 app.use(express.json());
 
-// 添加静态文件中间件，用于提供校验文件访问
-app.use('/.well-known', express.static(path.join(__dirname, '../.well-known')));
-
-// 导入所有模型
-const Article = require('./models/Article');
-const Admin = require('./models/Admin');
-const Setting = require('./models/Setting');
-
 // 连接数据库
-connectDB();
+connectDB().then(() => {
+  // 只有在数据库连接成功后才启动定时任务
+  cron.schedule('0 */6 * * *', async () => {
+    console.log('开始定时抓取任务');
+    try {
+      const crawler = new CrawlerService();
+      await crawler.crawl();
+    } catch (error) {
+      console.error('定时抓取失败:', error);
+    }
+  });
+}).catch(error => {
+  console.error('数据库连接失败，应用启动失败:', error);
+  process.exit(1);
+});
 
 // 添加路由日志中间件
 app.use((req, res, next) => {
@@ -69,32 +75,6 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
-  console.log('环境变量:', {
-    NODE_ENV: process.env.NODE_ENV,
-    PORT: process.env.PORT,
-    MONGODB_URI: process.env.MONGODB_URI ? '已设置' : '未设置'
-  });
-  
-  // 打印所有路由
-  console.log('已注册的路由:');
-  app._router.stack.forEach(r => {
-    if (r.route && r.route.path) {
-      console.log(`${Object.keys(r.route.methods)} ${r.route.path}`);
-    }
-  });
 });
-
-// 设置定时任务，每天抓取新文章
-const cron = require('node-cron');
-cron.schedule('0 */6 * * *', async () => {
-  console.log('开始定时抓取任务');
-  try {
-    await CrawlerService.crawl();
-  } catch (error) {
-    console.error('定时抓取失败:', error);
-  }
-});
-
-module.exports = app; 
