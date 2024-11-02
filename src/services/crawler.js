@@ -124,8 +124,7 @@ class CrawlerService {
               if (processedArticle && processedArticle.content) {
                 // 计算分数仅用于排序
                 const scoreResult = this.calculateArticleScore(
-                  processedArticle.title,
-                  processedArticle.content
+                  processedArticle.title
                 );
                 
                 allArticles.push({
@@ -190,44 +189,37 @@ class CrawlerService {
     }
   }
 
-  calculateArticleScore(title = '', content = '') {
+  calculateArticleScore(title = '') {
     try {
-      console.log('开始计算文章分数');
-      console.log('articleCategories 是否存在:', !!this.articleCategories);
+      // 只对标题进行简单的关键词匹配
+      const titleLower = title.toLowerCase();
       
-      // 确保 articleCategories 已初始化
-      if (!this.articleCategories) {
-        console.log('articleCategories 未初始化，重新初始化');
-        this.initializeCategories();
+      // 简单的优先级匹配
+      if (titleLower.includes('rag') || titleLower.includes('retrieval')) {
+        return { score: 100, category: 'RAG' };
+      }
+      
+      if (titleLower.includes('llm') || titleLower.includes('gpt') || 
+          titleLower.includes('language model') || titleLower.includes('fine-tun')) {
+        return { score: 80, category: 'LLM_DEV' };
+      }
+      
+      if (titleLower.includes('chatgpt') || titleLower.includes('claude') || 
+          titleLower.includes('gemini') || titleLower.includes('llama')) {
+        return { score: 60, category: 'LLM_NEWS' };
+      }
+      
+      // 其他包含 AI 相关词的文章
+      if (titleLower.includes('ai') || titleLower.includes('artificial intelligence') || 
+          titleLower.includes('machine learning')) {
+        return { score: 40, category: 'GENERAL_AI' };
       }
 
-      let maxScore = 0;
-      let category = 'GENERAL_AI';
-
-      const text = `${title} ${content}`.toLowerCase();
-      
-      Object.entries(this.articleCategories).forEach(([cat, config]) => {
-        config.keywords.forEach(keyword => {
-          if (text.includes(keyword.toLowerCase())) {
-            const score = config.weight;
-            if (score > maxScore) {
-              maxScore = score;
-              category = cat;
-            }
-          }
-        });
-      });
-
-      console.log('文章评分结果:', {
-        title: title.substring(0, 50) + '...',
-        score: maxScore,
-        category
-      });
-
-      return { score: maxScore, category };
+      // 默认分数
+      return { score: 20, category: 'GENERAL_AI' };
     } catch (error) {
       console.error('计算文章分数失败:', error);
-      return { score: 0, category: 'GENERAL_AI' };
+      return { score: 20, category: 'GENERAL_AI' };
     }
   }
 
@@ -480,7 +472,7 @@ class CrawlerService {
           {
             role: "system",
             content: `你是一个专业的中文翻译专家。请遵循以下规则：
-1. 将英文内容完整翻��为中文
+1. 将英文内容完整翻为中文
 2. 保持原文的格式和结构
 3. 技术术语的处理规则：
    - 首次出现时，保留英文原文并在括号中给出中文翻译
