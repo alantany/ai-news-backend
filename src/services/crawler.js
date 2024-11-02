@@ -156,10 +156,10 @@ class CrawlerService {
         }
       }
 
-      // 按分数排序并只取前5篇
+      // 修改这里，从之前的 5 篇改为 1 篇
       const selectedArticles = allArticles
         .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
+        .slice(0, 1);  // 只取分数最高的 1 篇
 
       // 翻译并保存选中的文章
       const savedArticles = [];
