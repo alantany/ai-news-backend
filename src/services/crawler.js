@@ -124,14 +124,19 @@ class CrawlerService {
           
           // 处理每篇文章，添加分数和分类
           const scoredArticles = feed.items.map(item => {
+            const content = item.content || item.description || '';
             const { score, category } = this.calculateArticleScore(
-              item.title,
-              item.content || item.description || ''
+              item.title || '',
+              content
             );
             return {
-              ...item,
+              title: item.title || '',
+              content: content,
+              link: item.link || item.guid,
+              pubDate: item.pubDate || item.isoDate,
               score,
-              category
+              category,
+              source: source.name
             };
           });
 
@@ -154,8 +159,8 @@ class CrawlerService {
           const existingArticle = await Article.findOne({ url: article.link });
           if (!existingArticle) {
             const translatedTitle = await this.translateText(article.title);
-            const translatedContent = await this.translateText(article.content || article.description);
-            const summary = this.generateSummary(article.content || article.description);
+            const translatedContent = await this.translateText(article.content);
+            const summary = this.generateSummary(article.content);
             const translatedSummary = await this.translateText(summary);
 
             const savedArticle = await Article.create({
@@ -164,15 +169,18 @@ class CrawlerService {
               summary: translatedSummary,
               source: article.source,
               url: article.link,
-              publishDate: new Date(article.pubDate || article.isoDate),
+              publishDate: new Date(article.pubDate),
               category: article.category
             });
 
             console.log(`保存新文章: ${translatedTitle} (${article.category})`);
             savedArticles.push(savedArticle);
+          } else {
+            console.log(`文章已存在，跳过: ${article.title}`);
           }
         } catch (error) {
           console.error(`文章处理失败:`, error);
+          continue;
         }
       }
 
@@ -184,7 +192,24 @@ class CrawlerService {
     }
   }
 
+  generateSummary(content) {
+    if (!content) return '';
+    
+    // 移除 HTML 标签
+    const plainText = content.replace(/<[^>]*>/g, '');
+    
+    // 如果内容少于200字符，直接返回
+    if (plainText.length <= 200) {
+      return plainText;
+    }
+    
+    // 否则返回前200字符
+    return plainText.substring(0, 200) + '...';
+  }
+
   async translateText(text) {
+    if (!text) return '';
+    
     try {
       const response = await this.openai.chat.completions.create({
         model: "gpt-3.5-turbo",
@@ -205,14 +230,9 @@ class CrawlerService {
       return response.choices[0].message.content.trim();
     } catch (error) {
       console.error('翻译失败:', error);
-      throw error;
+      return text; // 如果翻译失败，返回原文
     }
-  }
-
-  generateSummary(content) {
-    // 简单的摘要生成逻辑，可以根据需要调整
-    return content.substring(0, 200);
   }
 }
 
-module.exports = new CrawlerService();
+module.exports = CrawlerService;
