@@ -151,23 +151,27 @@ class CrawlerService {
 
       // 保存到数据库
       console.log(`开始保存 ${allArticles.length} 篇文章到数据库...`);
+      const savedArticles = [];
       for (const article of allArticles) {
         try {
-          const savedArticle = await Article.findOneAndUpdate(
-            { url: article.url },
-            article,
-            { upsert: true, new: true }
-          );
-          console.log(`文章保存成功: ${savedArticle.title}`);
+          // 使用 findOne 先检查文章是否已存在
+          const existingArticle = await Article.findOne({ url: article.url });
+          if (!existingArticle) {
+            // 如果文章不存在，则创建新文章
+            const savedArticle = await Article.create(article);
+            console.log(`新文章保存成功: ${savedArticle.title}`);
+            savedArticles.push(savedArticle);
+          } else {
+            console.log(`文章已存在，跳过: ${article.title}`);
+          }
         } catch (error) {
           console.error(`文章保存失败:`, error);
           console.error('文章数据:', article);
         }
       }
-      console.log('所有文章保存完成');
+      console.log(`所有文章保存完成，成功保存 ${savedArticles.length} 篇新文章`);
 
-      console.log(`抓取完成，共获取 ${allArticles.length} 篇相关文章`);
-      return allArticles;
+      return savedArticles;
     } catch (error) {
       console.error('抓取文章失败:', error);
       throw error;

@@ -27,14 +27,23 @@ const settingSchema = new mongoose.Schema({
   keywords: {
     type: Map,
     of: [String],
-    default: () => new Map([
-      ['LLM', ['GPT', 'Large Language Model', 'ChatGPT', 'Claude']],
-      ['RAG', ['Retrieval Augmented Generation']],
-      ['TRAINING', ['Fine-tuning', 'Training', 'Pre-training']],
-      ['APPLICATIONS', ['Applications', 'Use Cases', 'Implementation']],
-      ['TOOLS', ['Tools', 'Libraries', 'Frameworks']],
-      ['COMPANIES', ['OpenAI', 'Anthropic', 'Google', 'Microsoft']]
-    ])
+    default: () => ({
+      'LLM': ['GPT', 'Large Language Model', 'ChatGPT', 'Claude'],
+      'RAG': ['Retrieval Augmented Generation'],
+      'TRAINING': ['Fine-tuning', 'Training', 'Pre-training'],
+      'APPLICATIONS': ['Applications', 'Use Cases', 'Implementation'],
+      'TOOLS': ['Tools', 'Libraries', 'Frameworks'],
+      'COMPANIES': ['OpenAI', 'Anthropic', 'Google', 'Microsoft']
+    })
+  }
+});
+
+settingSchema.set('toJSON', {
+  transform: (doc, ret) => {
+    if (ret.keywords instanceof Map) {
+      ret.keywords = Object.fromEntries(ret.keywords);
+    }
+    return ret;
   }
 });
 
