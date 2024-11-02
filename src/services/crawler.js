@@ -325,45 +325,73 @@ class CrawlerService {
 
   async processTechCrunchArticle(item) {
     try {
-      // TechCrunch RSS 只提供摘要，需要从原文链接获取完整内容
       if (!item.link) {
         console.log('没有找到文章链接');
         return null;
       }
 
       console.log('从原文获取完整内容');
-      const response = await fetch(item.link);
+      const response = await fetch(item.link, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Referer': 'https://techcrunch.com'
+        }
+      });
+
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // TechCrunch 文章内容选择器
-      let content = '';
-      
-      // 文章主体内容通常在这些选择器中
+      // 更新 TechCrunch 文章内容选择器
       const articleSelectors = [
-        'article .article-content',
+        '.article-content',
         '.article__content',
         '.article-body',
         '.post-content',
-        '#article-container'
+        '#article-container',
+        '.article__main',  // 新增
+        'article p',       // 新增：获取所有段落
+        '.content-section' // 新增
       ];
 
+      let content = '';
       for (const selector of articleSelectors) {
-        const element = $(selector);
-        if (element.length > 0) {
-          content = element.text();
+        const elements = $(selector);
+        if (elements.length > 0) {
+          // 如果是段落选择器，合并所有段落
+          if (selector === 'article p') {
+            content = elements.map((i, el) => $(el).text()).get().join('\n\n');
+          } else {
+            content = elements.text();
+          }
+          console.log(`使用选择器 ${selector} 成功获取内容`);
           break;
         }
       }
 
       if (!content) {
+        // 尝试获取所有文本内容
+        content = $('article').text() || $('main').text();
+      }
+
+      if (!content) {
         console.log('无法获取文章内容');
+        // 如果实在获取不到，使用 RSS 中的描述
+        content = item.content || item.description || '';
+      }
+
+      const cleanContent = this.cleanHtmlContent(content);
+      
+      // 检查清理后的内容是否足够长
+      if (cleanContent.length < 100) {
+        console.log('内容太短，可能未正确获取');
         return null;
       }
 
-      return this.cleanHtmlContent(content);
+      return cleanContent;
     } catch (error) {
-      console.error('处理 TechCrunch 文章失败');
+      console.error('处理 TechCrunch 文章失败:', error.message);
       return null;
     }
   }
