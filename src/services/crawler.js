@@ -107,134 +107,140 @@ class CrawlerService {
     return new URL(url).hostname;
   }
 
+  calculateArticleScore(title = '') {
+    const titleLower = title.toLowerCase();
+    
+    // RAG 相关 (最高优先级)
+    if (titleLower.includes('rag') || 
+        titleLower.includes('retrieval') ||
+        titleLower.includes('vector database')) {
+      return { score: 100, category: 'RAG' };
+    }
+    
+    // LLM 开发相关 (次高优先级)
+    if (titleLower.includes('llm') || 
+        titleLower.includes('fine-tun') ||
+        titleLower.includes('train') ||
+        titleLower.includes('prompt') ||
+        titleLower.includes('model development')) {
+      return { score: 80, category: 'LLM_DEV' };
+    }
+    
+    // LLM 通用技术 (中等优先级)
+    if (titleLower.includes('gpt') || 
+        titleLower.includes('claude') ||
+        titleLower.includes('gemini') ||
+        titleLower.includes('llama') ||
+        titleLower.includes('language model')) {
+      return { score: 60, category: 'LLM_NEWS' };
+    }
+    
+    // AI 通用 (最低优先级)
+    return { score: 40, category: 'GENERAL_AI' };
+  }
+
   async crawl() {
     try {
       await this.loadRssSources();
       console.log('\n============= 开始抓取文章 =============');
       
-      // 获取设置
       const settings = await Setting.findOne() || { preArticlesPerSource: 5 };
       const articlesPerSource = settings.preArticlesPerSource || 5;
       console.log(`每个源抓取数量: ${articlesPerSource}`);
       
-      if (!this.rssSources || this.rssSources.length === 0) {
-        console.error('没有找到可用的 RSS 源');
-        return [];
-      }
-      console.log('RSS源:', this.rssSources.map(s => s.name).join(', '));
+      // 从所有源获取文章
+      let allArticles = [];
       
-      // 只获取第一个源的文章
-      const source = this.rssSources[0];
-      console.log(`\n从 ${source.name} 抓取文章`);
-      
-      try {
-        const feed = await this.parser.parseURL(source.url);
-        console.log(`获取到 ${feed.items.length} 篇文章`);
-        
-        if (!feed.items || feed.items.length === 0) {
-          console.log('没有找到文章');
-          return [];
-        }
-
-        // 处理文章
-        const savedArticles = [];
-        for (let i = 0; i < Math.min(articlesPerSource, feed.items.length); i++) {
-          const item = feed.items[i];
-          console.log(`\n[${i + 1}/${articlesPerSource}] 处理文章:`, item.title);
+      for (const source of this.rssSources) {
+        try {
+          console.log(`\n从 ${source.name} 抓取文章`);
+          const feed = await this.parser.parseURL(source.url);
           
-          try {
-            const processedArticle = await this.processRssItem(item, source);
-            if (!processedArticle || !processedArticle.content) {
-              console.log('处理失败，跳过');
-              continue;
-            }
+          // 获取每个源的前 N 篇文章
+          const articles = feed.items.slice(0, articlesPerSource).map(item => ({
+            title: item.title,
+            content: item.content || item.description,
+            link: item.link,
+            pubDate: item.pubDate,
+            source: source.name
+          }));
+          
+          allArticles.push(...articles);
+        } catch (error) {
+          console.error(`抓取 ${source.name} 失败:`, error.message);
+          continue;
+        }
+      }
 
-            const scoreResult = this.calculateArticleScore(processedArticle.title);
-            console.log('评分:', scoreResult.score);
+      // 计算所有文章的分数
+      allArticles = allArticles.map(article => {
+        const scoreResult = this.calculateArticleScore(article.title);
+        return {
+          ...article,
+          score: scoreResult.score,
+          category: scoreResult.category
+        };
+      });
 
-            const existingArticle = await Article.findOne({ url: processedArticle.link });
-            if (existingArticle) {
-              console.log('已存在，跳过');
-              continue;
-            }
+      // 按分数排序并选择前 N 篇
+      const selectedArticles = allArticles
+        .sort((a, b) => b.score - a.score)
+        .slice(0, articlesPerSource);
 
-            // 将标题和内容拼接在一起，用特殊标记分隔
-            const combinedText = `[TITLE]${processedArticle.title}[/TITLE]\n\n${processedArticle.content}`;
-            
-            console.log('开始翻译...');
-            const translatedText = await this.translateText(combinedText);
-            
-            // 从翻译后的文本中提取标题和内容
-            const titleMatch = translatedText.match(/\[TITLE\](.*?)\[\/TITLE\]/);
-            const translatedTitle = titleMatch ? titleMatch[1].trim() : processedArticle.title;
-            const translatedContent = translatedText
-              .replace(/\[TITLE\].*?\[\/TITLE\]\s*/, '')  // 移除标题部分
-              .trim();
-            
-            // 从翻译后的内容中提取开头部分作为摘要
-            const translatedSummary = this.generateSummary(translatedContent);
+      console.log('\n文章分类统计:');
+      const categories = selectedArticles.reduce((acc, article) => {
+        acc[article.category] = (acc[article.category] || 0) + 1;
+        return acc;
+      }, {});
+      console.log(categories);
 
-            const savedArticle = await Article.create({
-              title: translatedTitle,
-              content: translatedContent,
-              summary: translatedSummary,
-              source: processedArticle.source,
-              url: processedArticle.link,
-              publishDate: new Date(processedArticle.pubDate),
-              category: scoreResult.category
-            });
-
-            console.log('保存成功');
-            savedArticles.push(savedArticle);
-          } catch (error) {
-            console.error('处理文章失败:', error.message);
+      // 处理选中的文章
+      const savedArticles = [];
+      for (const article of selectedArticles) {
+        try {
+          const existingArticle = await Article.findOne({ url: article.link });
+          if (existingArticle) {
+            console.log('文章已存在，跳过:', article.title);
             continue;
           }
-        }
 
-        console.log(`\n本次共保存 ${savedArticles.length} 篇文章`);
-        return savedArticles;
-      } catch (error) {
-        console.error(`抓取失败:`, error);
-        return [];
+          // 合并标题和内容一次性翻译
+          const combinedText = `[TITLE]${article.title}[/TITLE]\n\n${article.content}`;
+          const translatedText = await this.translateText(combinedText);
+          
+          // 提取翻译后的标题和内容
+          const titleMatch = translatedText.match(/\[TITLE\](.*?)\[\/TITLE\]/);
+          const translatedTitle = titleMatch ? titleMatch[1].trim() : article.title;
+          const translatedContent = translatedText
+            .replace(/\[TITLE\].*?\[\/TITLE\]\s*/, '')
+            .trim();
+          
+          // 生成摘要
+          const translatedSummary = this.generateSummary(translatedContent);
+
+          const savedArticle = await Article.create({
+            title: translatedTitle,
+            content: translatedContent,
+            summary: translatedSummary,
+            source: article.source,
+            url: article.link,
+            publishDate: new Date(article.pubDate),
+            category: article.category
+          });
+
+          console.log('保存成功:', translatedTitle);
+          savedArticles.push(savedArticle);
+        } catch (error) {
+          console.error('处理文章失败:', error.message);
+          continue;
+        }
       }
+
+      console.log(`\n本次共保存 ${savedArticles.length} 篇文章`);
+      return savedArticles;
     } catch (error) {
       console.error('抓取过程发生错误:', error);
       throw error;
-    }
-  }
-
-  calculateArticleScore(title = '') {
-    try {
-      // 只对标题进行简单的关键词匹配
-      const titleLower = title.toLowerCase();
-      
-      // 简单的优先级匹配
-      if (titleLower.includes('rag') || titleLower.includes('retrieval')) {
-        return { score: 100, category: 'RAG' };
-      }
-      
-      if (titleLower.includes('llm') || titleLower.includes('gpt') || 
-          titleLower.includes('language model') || titleLower.includes('fine-tun')) {
-        return { score: 80, category: 'LLM_DEV' };
-      }
-      
-      if (titleLower.includes('chatgpt') || titleLower.includes('claude') || 
-          titleLower.includes('gemini') || titleLower.includes('llama')) {
-        return { score: 60, category: 'LLM_NEWS' };
-      }
-      
-      // 其他包含 AI 相关词的文章
-      if (titleLower.includes('ai') || titleLower.includes('artificial intelligence') || 
-          titleLower.includes('machine learning')) {
-        return { score: 40, category: 'GENERAL_AI' };
-      }
-
-      // 默认分数
-      return { score: 20, category: 'GENERAL_AI' };
-    } catch (error) {
-      console.error('计算文章分数失败:', error);
-      return { score: 20, category: 'GENERAL_AI' };
     }
   }
 
