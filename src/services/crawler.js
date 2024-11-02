@@ -1,6 +1,7 @@
 const Parser = require('rss-parser');
 const Article = require('../models/Article');
 const OpenAI = require('openai');
+const Setting = require('../models/Setting');
 
 class CrawlerService {
   constructor() {
@@ -36,62 +37,79 @@ class CrawlerService {
         url: 'https://venturebeat.com/category/ai/feed/'
       }
     ];
+
+    // 定义文章类型及其关键词权重
+    this.articleCategories = {
+      RAG: {
+        weight: 100,
+        keywords: [
+          'RAG',
+          'Retrieval Augmented Generation',
+          'Retrieval-Augmented',
+          'Vector Database',
+          'Knowledge Base',
+          'Document Retrieval'
+        ]
+      },
+      LLM_DEV: {
+        weight: 80,
+        keywords: [
+          'Fine-tuning',
+          'Training',
+          'Model Development',
+          'LLM Architecture',
+          'Prompt Engineering',
+          'Model Optimization'
+        ]
+      },
+      LLM_NEWS: {
+        weight: 60,
+        keywords: [
+          'GPT',
+          'Claude',
+          'Gemini',
+          'LLaMA',
+          'Large Language Model',
+          'Foundation Model'
+        ]
+      },
+      GENERAL_AI: {
+        weight: 40,
+        keywords: [
+          'Artificial Intelligence',
+          'Machine Learning',
+          'Deep Learning',
+          'Neural Network',
+          'AI Application'
+        ]
+      }
+    };
   }
 
-  async analyzeRelevance(title, summary) {
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "你是一个AI领域的专家，需要判断文章与AI技术的相关性。重点关注：LLM、RAG、AI训练、AI应用等主题。"
-          },
-          {
-            role: "user",
-            content: `请分析以下文章与AI技术的相关性，返回0-100的分数和简短理由：\n标题：${title}\n摘要：${summary}`
+  calculateArticleScore(title, content) {
+    let maxScore = 0;
+    let category = 'GENERAL_AI';
+
+    // 将标题和内容合并为一个文本进行检索
+    const text = `${title} ${content}`.toLowerCase();
+
+    // 遍历每个分类的关键词
+    for (const [cat, config] of Object.entries(this.articleCategories)) {
+      for (const keyword of config.keywords) {
+        if (text.includes(keyword.toLowerCase())) {
+          const score = config.weight;
+          if (score > maxScore) {
+            maxScore = score;
+            category = cat;
           }
-        ],
-        temperature: 0.3,
-        max_tokens: 200
-      });
-
-      const result = response.choices[0].message.content;
-      // 提取分数
-      const scoreMatch = result.match(/\d+/);
-      const score = scoreMatch ? parseInt(scoreMatch[0]) : 0;
-      return { score, reason: result };
-    } catch (error) {
-      console.error('分析相关性失败:', error);
-      return { score: 0, reason: '分析失败' };
+        }
+      }
     }
-  }
 
-  async translateText(text) {
-    try {
-      console.log('开始翻译文本');
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "你是一个专业的翻译，需要将英文AI新闻翻译成中文，保持专业性和可读性。"
-          },
-          {
-            role: "user",
-            content: `请将以下文本翻译成中文：\n${text}`
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 1000
-      });
-
-      console.log('翻译成功');
-      return response.choices[0].message.content.trim();
-    } catch (error) {
-      console.error('翻译失败:', error);
-      return text;
-    }
+    return {
+      score: maxScore,
+      category
+    };
   }
 
   async crawl() {
@@ -103,74 +121,62 @@ class CrawlerService {
         try {
           console.log(`正在从 ${source.name} 抓取...`);
           const feed = await this.parser.parseURL(source.url);
-          console.log(`从 ${source.name} 获取到 ${feed.items.length} 篇文章`);
           
-          for (const item of feed.items) {
-            const content = item.content || item.description || '';
-            const summary = this.generateSummary(content);
-            
-            // 分析文章相关性
-            const { score, reason } = await this.analyzeRelevance(item.title, summary);
-            console.log(`文章相关性分数: ${score}, 原因: ${reason}`);
+          // 处理每篇文章，添加分数和分类
+          const scoredArticles = feed.items.map(item => {
+            const { score, category } = this.calculateArticleScore(
+              item.title,
+              item.content || item.description || ''
+            );
+            return {
+              ...item,
+              score,
+              category
+            };
+          });
 
-            // 只处理相关性分数大于60的文章
-            if (score > 60) {
-              const title = await this.translateText(item.title);
-              const translatedSummary = await this.translateText(summary);
-
-              const article = {
-                title,
-                content,
-                summary: translatedSummary,
-                source: source.name,
-                url: item.link || item.guid,
-                publishDate: new Date(item.pubDate || item.isoDate),
-                category: 'AI',
-                relevanceScore: score,
-                relevanceReason: reason,
-                likes: 0,
-                views: 0
-              };
-
-              allArticles.push(article);
-            }
-          }
+          allArticles.push(...scoredArticles);
         } catch (error) {
           console.error(`从 ${source.name} 抓取失败:`, error);
           continue;
         }
       }
 
-      // 按相关性分数和发布日期排序
-      allArticles.sort((a, b) => {
-        if (b.relevanceScore !== a.relevanceScore) {
-          return b.relevanceScore - a.relevanceScore;
-        }
-        return b.publishDate - a.publishDate;
-      });
+      // 按分数排序并只取前5篇
+      const selectedArticles = allArticles
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
 
-      // 保存到数据库
-      console.log(`开始保存 ${allArticles.length} 篇文章到数据库...`);
+      // 翻译并保存选中的文章
       const savedArticles = [];
-      for (const article of allArticles) {
+      for (const article of selectedArticles) {
         try {
-          // 使用 findOne 先检查文章是否已存在
-          const existingArticle = await Article.findOne({ url: article.url });
+          const existingArticle = await Article.findOne({ url: article.link });
           if (!existingArticle) {
-            // 如果文章不存在，则创建新文章
-            const savedArticle = await Article.create(article);
-            console.log(`新文章保存成功: ${savedArticle.title}`);
+            const translatedTitle = await this.translateText(article.title);
+            const translatedContent = await this.translateText(article.content || article.description);
+            const summary = this.generateSummary(article.content || article.description);
+            const translatedSummary = await this.translateText(summary);
+
+            const savedArticle = await Article.create({
+              title: translatedTitle,
+              content: translatedContent,
+              summary: translatedSummary,
+              source: article.source,
+              url: article.link,
+              publishDate: new Date(article.pubDate || article.isoDate),
+              category: article.category
+            });
+
+            console.log(`保存新文章: ${translatedTitle} (${article.category})`);
             savedArticles.push(savedArticle);
-          } else {
-            console.log(`文章已存在，跳过: ${article.title}`);
           }
         } catch (error) {
-          console.error(`文章保存失败:`, error);
-          console.error('文章数据:', article);
+          console.error(`文章处理失败:`, error);
         }
       }
-      console.log(`所有文章保存完成，成功保存 ${savedArticles.length} 篇新文章`);
 
+      console.log(`本次抓取完成，成功保存 ${savedArticles.length} 篇文章`);
       return savedArticles;
     } catch (error) {
       console.error('抓取文章失败:', error);
@@ -178,12 +184,34 @@ class CrawlerService {
     }
   }
 
+  async translateText(text) {
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [
+          {
+            role: "system",
+            content: "你是一个专业的中文翻译，需要将英文文章翻译成通顺的中文。保持专业术语的准确性。"
+          },
+          {
+            role: "user",
+            content: `请将以下内容翻译成中文：\n${text}`
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 1000
+      });
+
+      return response.choices[0].message.content.trim();
+    } catch (error) {
+      console.error('翻译失败:', error);
+      throw error;
+    }
+  }
+
   generateSummary(content) {
-    if (!content) return '';
-    // 移除 HTML 标签
-    const text = content.replace(/<[^>]*>/g, '');
-    // 取前 200 个字符作为摘要
-    return text.slice(0, 200) + '...';
+    // 简单的摘要生成逻辑，可以根据需要调整
+    return content.substring(0, 200);
   }
 }
 

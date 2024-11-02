@@ -17,38 +17,20 @@ router.get('/count', async (req, res) => {
 // 获取文章列表
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, pageSize = 10, category } = req.query;
+    const { page = 1, pageSize = 10 } = req.query;
     const skip = (page - 1) * pageSize;
 
-    // 构建查询条件
-    const query = {};
-    if (category) {
-      query.category = category;
-    }
-
-    const [articles, total] = await Promise.all([
-      Article.find(query)
-        .select('title content summary source url imageUrl publishDate likes views tags category')
-        .sort({ publishDate: -1 })
-        .skip(skip)
-        .limit(parseInt(pageSize)),
-      Article.countDocuments(query)
-    ]);
-
-    // 处理文章内容，生成摘要
-    const processedArticles = articles.map(article => {
-      const doc = article.toObject();
-      if (!doc.summary) {
-        doc.summary = doc.content.substring(0, 100) + '...';
-      }
-      return doc;
-    });
+    const articles = await Article.find()
+      .select('title summary source url publishDate likes views')
+      .sort({ publishDate: -1 })
+      .skip(skip)
+      .limit(parseInt(pageSize));
 
     res.json({
-      articles: processedArticles,
-      total,
+      articles,
+      total: articles.length,
       currentPage: parseInt(page),
-      totalPages: Math.ceil(total / pageSize)
+      totalPages: Math.ceil(articles.length / pageSize)
     });
   } catch (error) {
     console.error('获取文章列表错误:', error);
@@ -93,7 +75,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// 修改代理路由
+// 修改代理路由，返回一个完整的 HTML 页面
 router.get('/proxy/:id', async (req, res) => {
   try {
     const article = await Article.findById(req.params.id);
@@ -111,7 +93,7 @@ router.get('/proxy/:id', async (req, res) => {
           <title>${article.title}</title>
           <style>
             body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
               line-height: 1.6;
               color: #333;
               max-width: 800px;
@@ -175,12 +157,21 @@ router.get('/proxy/:id', async (req, res) => {
               <a href="${article.url}" target="_blank">查看原文</a>
             </div>
           </div>
+          <script>
+            // 处理所有图片链接，确保是 HTTPS
+            document.querySelectorAll('img').forEach(img => {
+              if (img.src.startsWith('http:')) {
+                img.src = img.src.replace('http:', 'https:');
+              }
+            });
+          </script>
         </body>
       </html>
     `;
 
-    // 设置正确的内容类型
+    // 设置正确的内容类型和缓存控制
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
     res.send(htmlContent);
   } catch (error) {
     console.error('代理请求失败:', error);
