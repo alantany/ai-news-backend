@@ -5,6 +5,7 @@ const cheerio = require('cheerio');
 const fs = require('fs').promises;
 const path = require('path');
 const Setting = require('../models/Setting');
+const translate = require('@vitalets/google-translate-api');
 
 class CrawlerService {
   constructor() {
@@ -446,65 +447,32 @@ class CrawlerService {
     if (!text) return '';
     
     try {
-      // 限制输入长度，确保不超过4000个字符
-      const maxLength = 4000;
-      if (text.length > maxLength) {
-        console.log('文本超长，进行分段翻译');
-        return this.translateLongText(text, maxLength);
-      }
-
-      const response = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "你是一个专业的中文翻译专家。请将英文翻译为中文，保持专业术语的准确性。"
-          },
-          {
-            role: "user",
-            content: `请翻译以下内容：\n\n${text}`
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 1000
-      });
-
-      return response.choices[0].message.content.trim();
+      const result = await translate(text, { to: 'zh-CN' });
+      return result.text;
     } catch (error) {
       console.error('翻译失败');
-      throw error;
-    }
-  }
-
-  async translateLongText(text, maxLength) {
-    try {
-      // 按句子分段
-      const segments = text.split(/(?<=[.!?])\s+/);
-      let currentSegment = '';
-      let translatedParts = [];
-
-      for (const sentence of segments) {
-        if ((currentSegment + sentence).length > maxLength) {
-          // 当前段已满，翻译并开始新段
-          if (currentSegment) {
-            const translatedPart = await this.translateText(currentSegment);
-            translatedParts.push(translatedPart);
+      
+      // 如果文本太长，进行分段翻译
+      if (text.length > 5000) {
+        console.log('文本过长，进行分段翻译');
+        const segments = text.split(/(?<=[.!?])\s+/);
+        const translatedSegments = [];
+        
+        for (const segment of segments) {
+          try {
+            const result = await translate(segment, { to: 'zh-CN' });
+            translatedSegments.push(result.text);
+            // 添加短暂延迟避免请求过快
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (e) {
+            console.error('分段翻译失败');
+            continue;
           }
-          currentSegment = sentence;
-        } else {
-          currentSegment += (currentSegment ? ' ' : '') + sentence;
         }
+        
+        return translatedSegments.join('\n');
       }
-
-      // 翻译最后一段
-      if (currentSegment) {
-        const translatedPart = await this.translateText(currentSegment);
-        translatedParts.push(translatedPart);
-      }
-
-      return translatedParts.join('\n\n');
-    } catch (error) {
-      console.error('分段翻译失败');
+      
       throw error;
     }
   }
