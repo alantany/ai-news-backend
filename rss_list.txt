@@ -1,11 +1,13 @@
 # Medium 文章源（已处理好）
 # https://towardsdatascience.com/feed
 
-# Microsoft AI Blog
-https://blogs.microsoft.com/ai/feed/
+# Microsoft AI Blog（已处理好）
+# https://blogs.microsoft.com/ai/feed/
+
+# TechCrunch AI
+https://techcrunch.com/tag/artificial-intelligence/feed/
 
 # 暂时不抓取的源
-# https://techcrunch.com/tag/artificial-intelligence/feed/
 # https://www.artificial-intelligence.blog/rss-feeds
 
 # 删除文档：curl -X POST https://rss.kids-coder.cn/api/admin/clear-articles
