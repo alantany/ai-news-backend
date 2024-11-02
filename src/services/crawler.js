@@ -1,8 +1,7 @@
 const Parser = require('rss-parser');
 const Article = require('../models/Article');
-const OpenAI = require('openai');
+const { OpenAI } = require('openai');
 const Setting = require('../models/Setting');
-const md5 = require('md5');
 
 class CrawlerService {
   constructor() {
