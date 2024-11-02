@@ -1,0 +1,73 @@
+数据库名称: ai-news
+
+数据库主机: airss-shard-00-00.ykc1h.mongodb.net
+
+POST /api/admin/crawl
+
+Body: {}
+
+手动抓取请求
+
+开始抓取文章...
+
+ 
+
+ 
+
+正在从 Towards Data Science 抓取...
+
+=================== 原文详情 ===================
+
+ 
+
+=================== 原文详情 ===================
+
+标题: Ashton Kutcher explains why he’s betting on AI, but not trying to pick a ‘winner’
+
+标题: Unsupervised LLM Evaluations
+
+内容长度: 412
+
+内容长度: 0
+
+原文内容:
+
+原文内容:
+
+ 
+
+===============================================
+
+ <p>Ashton Kutcher, co-founder of Sound Ventures, believes that every company is going to become an AI company, but that there might not be a winner in the space. The actor and investor spoke at TechCrunch Disrupt 2024 on Tuesday alongside Sound co-founder Guy Oseary and partner Effie Epstein to detail what the firm is looking [&#8230;]</p>
+
+ 
+
+ 
+
+<p>© 2024 TechCrunch. All rights reserved. For personal use only.</p>
+
+=================== 原文详情 ===================
+
+ 
+
+===============================================
+
+标题: Unpopular Opinion: It’s Harder Than Ever to Be a Good Data Scientist
+
+ 
+
+内容长度: 689
+
+ 
+
+原文内容:
+
+=================== 原文详情 ===================
+
+标题: What are AI ‘world models,’ and why do they matter?
+
+内容长度: 436
+
+原文内容:
+
+ <div class="medium-feed-item"><p class="medium-feed-image"><a href="https://towardsdatascience.com/unpopular-opinion-its-harder-than-ever-to-be-a-good-data-scientist-489df13b592c?source=rss----7f60cf5620c9---4"><img src="https://cdn-images-1.medium.com/max/1024/1*kU4wXP_zpu_Lv8_FY_im6w.png" width="1024"></a></p><p class="medium-feed-snippet">What working as a data scientist at various companies and industries over the past 6+ years has taught me</p><p class="medium-feed-link"><a href="https://towardsdatascience.com/unpopular-opinion-its-harder-than-ever-to-be-a-good-data-scientist-489df13b592c?source=rss----7f60cf5620c9---4">Continue reading on Towards Data Science »</a></p></div>

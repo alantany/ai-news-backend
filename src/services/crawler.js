@@ -2,6 +2,8 @@ const Parser = require('rss-parser');
 const Article = require('../models/Article');
 const { OpenAI } = require('openai');
 const Setting = require('../models/Setting');
+const fetch = require('node-fetch');
+const cheerio = require('cheerio');
 
 class CrawlerService {
   constructor() {
@@ -115,6 +117,31 @@ class CrawlerService {
     };
   }
 
+  async fetchFullContent(url) {
+    try {
+      console.log('尝试获取完整文章内容:', url);
+      const response = await fetch(url);
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      // 根据不同网站的结构提取文章内容
+      // Microsoft Blog
+      if (url.includes('blogs.microsoft.com')) {
+        return $('article').text() || $('main').text();
+      }
+      // TechCrunch
+      if (url.includes('techcrunch.com')) {
+        return $('.article-content').text();
+      }
+      // 其他网站可以添加相应的提取规则
+      
+      return null;
+    } catch (error) {
+      console.error('获取完整内容失败:', error);
+      return null;
+    }
+  }
+
   async crawl() {
     try {
       console.log('开始抓取文章...');
@@ -126,9 +153,10 @@ class CrawlerService {
           const feed = await this.parser.parseURL(source.url);
           
           for (const item of feed.items) {
-            const content = item.content || item.contentSnippet || item.description || '';
+            // 尝试获取完整内容
+            const fullContent = await this.fetchFullContent(item.link);
+            const content = fullContent || item.content || item.contentSnippet || item.description || '';
             
-            // 打印原文详情
             console.log('\n=================== 原文详情 ===================');
             console.log('标题:', item.title);
             console.log('内容长度:', content.length);
