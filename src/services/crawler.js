@@ -91,7 +91,7 @@ class CrawlerService {
       }));
     } catch (error) {
       console.error('加载RSS源失败:', error);
-      // 使用默认值
+      // 使默认值
       this.rssSources = [{
         name: 'Towards Data Science',
         url: 'https://towardsdatascience.com/feed'
@@ -309,31 +309,19 @@ class CrawlerService {
   }
 
   async processMicrosoftArticle(item) {
-    console.log('处理 Microsoft 文章');
     try {
-      // Microsoft 博客的内容通常在 content 字段
-      let content = item.content || '';
-      
-      // 如果 content 为空，尝试使用 description
-      if (!content) {
-        content = item.description || '';
-      }
-      
-      // 清理 HTML 内容
+      let content = item.content || item.description || '';
       content = this.cleanHtmlContent(content);
       
-      // 如果内容还是太短，尝试从原文链接获取
       if (content.length < 500 && item.link) {
-        console.log('内容太短，尝试获取完整内容');
         const fullContent = await this.fetchFullContent(item.link, 'microsoft');
         if (fullContent && fullContent.length > content.length) {
           content = fullContent;
         }
       }
-
       return content;
     } catch (error) {
-      console.error('处理 Microsoft 文章失败:', error);
+      console.error('处理 Microsoft 文章失败');
       return null;
     }
   }
@@ -371,28 +359,20 @@ class CrawlerService {
       const $ = cheerio.load(html);
       
       if (source === 'microsoft') {
-        // Microsoft 博客的主要内容选择器
-        let content = '';
-        
-        // 尝试不同的选择器
-        content = $('.article-content').text() || 
-                  $('.entry-content').text() || 
-                  $('main article').text() ||
-                  $('.post-content').text();
-        
-        return content;
+        return $('.article-content').text() || 
+               $('.entry-content').text() || 
+               $('main article').text() ||
+               $('.post-content').text();
       }
-      
       return null;
     } catch (error) {
-      console.error('获取完整内容失败:', error);
+      console.error('获取完整内容失败');
       return null;
     }
   }
 
   cleanHtmlContent(content) {
     if (!content) return '';
-    
     try {
       const $ = cheerio.load(content);
       
@@ -443,26 +423,16 @@ class CrawlerService {
         }
       });
       
-      // 获取处理后的文本
-      let cleanText = $.text();
-      
-      // 清理多余的空行和空格
-      cleanText = cleanText
-        .replace(/\n{3,}/g, '\n\n')  // 将多个空行减少为两个
-        .replace(/\s+/g, ' ')        // 将多个空格合并为一个
-        .trim();
-      
-      // 按段落重新格式化
-      const paragraphs = cleanText.split('\n\n');
-      const formattedParagraphs = paragraphs
-        .map(p => p.trim())
-        .filter(p => p);
-      
-      return formattedParagraphs.join('\n\n');
+      return this.formatContent($);
     } catch (error) {
-      console.error('清理HTML内容失败:', error);
+      console.error('清理 HTML 内容失败');
       return content;
     }
+  }
+
+  formatContent($) {
+    // 移除所有内容相关的日志
+    return $.text().trim();
   }
 
   generateSummary(content) {
@@ -477,7 +447,7 @@ class CrawlerService {
     
     try {
       const response = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo-16k",
+        model: "gpt-3.5-turbo",
         messages: [
           {
             role: "system",
@@ -499,16 +469,16 @@ class CrawlerService {
           }
         ],
         temperature: 0.2,
-        max_tokens: 4000
+        max_tokens: 2000
       });
 
       return response.choices[0].message.content.trim();
     } catch (error) {
-      console.error('翻译失败:', error);
+      console.error('翻译失败');
       
       if (error.message.includes('maximum context length')) {
         console.log('内容太长，尝试分段翻译');
-        const segments = this.splitTextIntoSegments(text, 3000);
+        const segments = this.splitTextIntoSegments(text, 1500);
         const translatedSegments = await Promise.all(
           segments.map(segment => this.translateText(segment))
         );
