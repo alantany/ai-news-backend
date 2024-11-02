@@ -4,8 +4,11 @@
 # Microsoft AI Blog（已处理好）
 # https://blogs.microsoft.com/ai/feed/
 
-# TechCrunch AI
-https://techcrunch.com/tag/artificial-intelligence/feed/
+# TechCrunch AI（处理困难，暂时移除）
+# https://techcrunch.com/tag/artificial-intelligence/feed/
+
+# VentureBeat AI
+https://venturebeat.com/category/ai/feed/
 
 # 暂时不抓取的源
 # https://www.artificial-intelligence.blog/rss-feeds
