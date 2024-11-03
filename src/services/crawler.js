@@ -365,7 +365,16 @@ class CrawlerService {
     if (!content) return '';
     
     try {
-      const $ = cheerio.load(content);
+      // 移除作者和摘要部分
+      let cleanedContent = content
+        .replace(/<作者>.*?<\/作者>/g, '')
+        .replace(/<摘要>.*?<\/摘要>/g, '')
+        .replace(/作者:.*?\n/g, '')
+        .replace(/摘要:.*?\n/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      const $ = cheerio.load(cleanedContent);
       
       // 移除不需要的元素
       $('script, style, iframe, nav, header, footer').remove();
@@ -380,18 +389,9 @@ class CrawlerService {
         }
       });
 
-      // 处理标题
-      $('h1, h2, h3, h4, h5, h6').each((i, elem) => {
-        const text = $(elem).text().trim();
-        if (text) {
-          paragraphs.push(text);
-        }
-      });
-
-      // 如果没有找到段落标签，尝试按照换行符分割
+      // 如果没有找到段落标签，尝试按换行符分割
       if (paragraphs.length === 0) {
-        const plainText = $.text().trim();
-        paragraphs = plainText
+        paragraphs = cleanedContent
           .split(/\n+/)
           .map(p => p.trim())
           .filter(p => p.length > 0);
