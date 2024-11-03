@@ -207,7 +207,7 @@ class CrawlerService {
           allArticles.push(...articles);
           console.log(`获取到 ${articles.length} 篇文章`);
         } catch (error) {
-          console.error(`抓取失败: ${source.name}`);
+          console.error(`抓取失败: ${source.name}`, error);
           continue;
         }
       }
@@ -218,6 +218,16 @@ class CrawlerService {
       const savedArticles = [];
       for (const article of allArticles) {
         try {
+          // 检查必要字段
+          if (!article.title || !article.content || !article.link) {
+            console.error('文章缺少必要字段:', {
+              hasTitle: !!article.title,
+              hasContent: !!article.content,
+              hasLink: !!article.link
+            });
+            continue;
+          }
+
           const existingArticle = await Article.findOne({ url: article.link });
           if (existingArticle) {
             console.log('已存在，跳过');
@@ -234,10 +244,16 @@ class CrawlerService {
             isTranslated: false
           });
 
-          console.log('保存成功');
+          console.log('保存成功:', savedArticle.title);
           savedArticles.push(savedArticle);
         } catch (error) {
-          console.error('保存失败');
+          console.error('保存失败，错误:', error.message);
+          console.error('文章数据:', {
+            title: article.title,
+            source: article.source,
+            hasContent: !!article.content,
+            url: article.link
+          });
           continue;
         }
       }
