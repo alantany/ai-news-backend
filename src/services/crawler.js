@@ -186,51 +186,43 @@ class CrawlerService {
         try {
           console.log(`\n抓取源: ${source.name}`);
           const feed = await this.parser.parseURL(source.url);
+          console.log('RSS 响应:', {
+            itemCount: feed.items.length,
+            hasItems: !!feed.items,
+            source: source.name
+          });
           
           // 获取每个源的前 N 篇文章
-          const articles = feed.items
-            .slice(0, articlesPerSource)
-            .map(item => {
-              const processedArticle = this.processRssItem(item, source);
-              if (processedArticle) {
-                const scoreResult = this.calculateArticleScore(processedArticle.title, source.name);
-                return {
-                  ...processedArticle,
-                  score: scoreResult.score,
-                  category: scoreResult.category
-                };
-              }
-              return null;
-            })
-            .filter(article => article !== null);
+          const articles = [];
+          for (const item of feed.items.slice(0, articlesPerSource)) {
+            const processedArticle = await this.processRssItem(item, source);
+            if (processedArticle) {
+              const scoreResult = this.calculateArticleScore(processedArticle.title, source.name);
+              articles.push({
+                ...processedArticle,
+                score: scoreResult.score,
+                category: scoreResult.category
+              });
+            }
+          }
 
           allArticles.push(...articles);
-          console.log(`获取到 ${articles.length} 篇文章`);
+          console.log(`获取到 ${articles.length} 篇有效文章`);
         } catch (error) {
           console.error(`抓取失败: ${source.name}`, error);
           continue;
         }
       }
 
-      console.log(`\n总共获取到 ${allArticles.length} 篇文章`);
+      console.log(`\n总共获取到 ${allArticles.length} 篇有效文章`);
 
       // 保存所有文章
       const savedArticles = [];
       for (const article of allArticles) {
         try {
-          // 检查必要字段
-          if (!article.title || !article.content || !article.link) {
-            console.error('文章缺少必要字段:', {
-              hasTitle: !!article.title,
-              hasContent: !!article.content,
-              hasLink: !!article.link
-            });
-            continue;
-          }
-
           const existingArticle = await Article.findOne({ url: article.link });
           if (existingArticle) {
-            console.log('已存在，跳过');
+            console.log('已存在，跳过:', article.title);
             continue;
           }
 
@@ -247,12 +239,10 @@ class CrawlerService {
           console.log('保存成功:', savedArticle.title);
           savedArticles.push(savedArticle);
         } catch (error) {
-          console.error('保存失败，错误:', error.message);
-          console.error('文章数据:', {
+          console.error('保存失败:', {
+            error: error.message,
             title: article.title,
-            source: article.source,
-            hasContent: !!article.content,
-            url: article.link
+            source: article.source
           });
           continue;
         }
@@ -268,18 +258,35 @@ class CrawlerService {
 
   async processRssItem(item, source) {
     try {
+      console.log('处理文章:', {
+        hasTitle: !!item.title,
+        hasContent: !!(item.content || item.contentSnippet || item.description),
+        hasLink: !!item.link,
+        source: source.name
+      });
+
+      if (!item.title || !item.link) {
+        console.log('文章缺少标题或链接，跳过');
+        return null;
+      }
+
       const content = item.content || item.contentSnippet || item.description || '';
       const cleanContent = this.cleanHtmlContent(content);
       
+      if (!cleanContent) {
+        console.log('清理后的内容为空，跳过');
+        return null;
+      }
+
       return {
-        title: item.title,
+        title: item.title.trim(),
         content: cleanContent,
         link: item.link,
-        pubDate: item.pubDate,
+        pubDate: item.pubDate || item.isoDate || new Date(),
         source: source.name
       };
     } catch (error) {
-      console.error('处理文章失败');
+      console.error('处理文章失败:', error);
       return null;
     }
   }
