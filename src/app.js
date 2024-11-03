@@ -30,22 +30,24 @@ async function translateUntranslatedArticles() {
   try {
     console.log('\n============= 开始翻译未翻译文章 =============');
     
-    // 查找未翻译的文章
+    // 查找任一字段未翻译的文章
     const untranslatedArticles = await Article.find({
       $or: [
         { translatedTitle: { $exists: false } },
         { translatedContent: { $exists: false } },
         { translatedTitle: null },
-        { translatedContent: null }
+        { translatedContent: null },
+        { translatedTitle: '' },
+        { translatedContent: '' }
       ]
     });
     
-    console.log(`找到 ${untranslatedArticles.length} 篇未翻译的文章`);
+    console.log(`找到 ${untranslatedArticles.length} 篇需要翻译的文章`);
 
     // 翻译文章
     for (const article of untranslatedArticles) {
       try {
-        console.log(`翻译文章: ${article.title}`);
+        console.log(`开始翻译文章: ${article.title}`);
         
         // 翻译标题和内容
         const [titleResult, contentResult] = await Promise.all([
@@ -53,16 +55,33 @@ async function translateUntranslatedArticles() {
           translate(article.content, { to: 'zh-CN' })
         ]);
 
+        console.log('翻译结果:', {
+          originalTitle: article.title,
+          translatedTitle: titleResult.text,
+          hasTranslatedContent: !!contentResult.text
+        });
+
         // 更新文章
-        article.translatedTitle = titleResult.text;
-        article.translatedContent = contentResult.text;
-        article.translatedSummary = generateSummary(contentResult.text);
-        article.summary = generateSummary(article.content);
-        article.isTranslated = true;
-        
-        await article.save();
-        console.log('翻译完成并保存');
-        
+        const updatedArticle = await Article.findByIdAndUpdate(
+          article._id,
+          {
+            $set: {
+              translatedTitle: titleResult.text,
+              translatedContent: contentResult.text,
+              translatedSummary: generateSummary(contentResult.text),
+              summary: generateSummary(article.content),
+              isTranslated: true
+            }
+          },
+          { new: true }
+        );
+
+        console.log('文章更新成功:', {
+          id: updatedArticle._id,
+          hasTranslatedTitle: !!updatedArticle.translatedTitle,
+          hasTranslatedContent: !!updatedArticle.translatedContent
+        });
+
         // 添加延迟避免请求过快
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
@@ -71,7 +90,17 @@ async function translateUntranslatedArticles() {
       }
     }
 
-    console.log('所有未翻译文章处理完成');
+    // 验证翻译结果
+    const verifyArticles = await Article.find({
+      isTranslated: true,
+      translatedTitle: { $exists: true, $ne: null, $ne: '' },
+      translatedContent: { $exists: true, $ne: null, $ne: '' }
+    });
+    console.log('翻译统计:', {
+      totalArticles: await Article.countDocuments(),
+      fullyTranslated: verifyArticles.length
+    });
+
   } catch (error) {
     console.error('翻译过程失败:', error);
   }
