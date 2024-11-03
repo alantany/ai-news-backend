@@ -291,30 +291,21 @@ class CrawlerService {
         return null;
       }
 
-      let content = '';
+      // 获取并清理内容
+      const rawContent = item.content || item.contentSnippet || item.description || '';
       
-      if (source.name === 'arXiv RAG Papers') {
-        const arxivContent = await this.processArxivArticle(item);
-        if (!arxivContent) {
-          console.log('arXiv 文章处理失败');
-          return null;
-        }
-        content = arxivContent;
-      } else {
-        content = item.content || item.contentSnippet || item.description || '';
-        content = this.cleanHtmlContent(content);
-      }
-
-      if (!content) {
-        console.log('内容为空，跳过');
-        return null;
-      }
+      // 清理内容（移除作者和摘要）
+      const cleanContent = this.cleanHtmlContent(rawContent);
+      
+      // 生成摘要
+      const summary = this.generateSummary(cleanContent);  // 使用清理后的内容生成摘要
 
       return {
         title: item.title.trim(),
-        content: content,
+        content: cleanContent,        // 保存清理后的内容
+        summary: summary,             // 保存生成的摘要
         link: item.link,
-        pubDate: item.pubDate || item.isoDate || new Date(),
+        publishDate: item.pubDate || item.isoDate || new Date(),
         source: source.name
       };
     } catch (error) {
