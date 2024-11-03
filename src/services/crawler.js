@@ -212,7 +212,7 @@ class CrawlerService {
         acc[article.category] = (acc[article.category] || 0) + 1;
         return acc;
       }, {});
-      console.log('\n文章分类统计:', categories);
+      console.log('\n文章分��统计:', categories);
 
       // 保存文章
       const savedArticles = [];
@@ -253,15 +253,11 @@ class CrawlerService {
   async processRssItem(item, source) {
     try {
       const content = item.content || item.contentSnippet || item.description || '';
+      const cleanContent = this.cleanHtmlContent(content);
       
-      if (!content) {
-        console.log('内容为空，跳过');
-        return null;
-      }
-
       return {
         title: item.title,
-        content: content,
+        content: cleanContent,
         link: item.link,
         pubDate: item.pubDate,
         source: source.name
@@ -418,59 +414,47 @@ class CrawlerService {
 
   cleanHtmlContent(content) {
     if (!content) return '';
+    
     try {
       const $ = cheerio.load(content);
       
-      // 处理代码块
-      $('pre, code').each((i, elem) => {
-        const code = $(elem).text().trim();
-        $(elem).replaceWith(`\n\n\`\`\`\n${code}\n\`\`\`\n\n`);
+      // 移除所有脚本和样式
+      $('script, style').remove();
+      
+      // 处理段落
+      $('p').each((i, elem) => {
+        $(elem).after('\n\n');
       });
       
       // 处理标题
       $('h1, h2, h3, h4, h5, h6').each((i, elem) => {
-        const level = elem.name[1]; // 获取标题级别
         const text = $(elem).text().trim();
-        const prefix = '#'.repeat(level);
-        $(elem).replaceWith(`\n\n${prefix} ${text}\n\n`);
-      });
-      
-      // 处理段落
-      $('p').each((i, elem) => {
-        const text = $(elem).text().trim();
-        if (text) {
-          $(elem).replaceWith(`\n\n${text}\n\n`);
-        }
+        $(elem).replaceWith(`\n\n${text}\n\n`);
       });
       
       // 处理列表
       $('ul, ol').each((i, elem) => {
-        const items = [];
-        $(elem).find('li').each((j, li) => {
-          const text = $(li).text().trim();
-          items.push(`• ${text}`);
+        $(elem).find('li').each((i, li) => {
+          $(li).prepend('• ');
+          $(li).append('\n');
         });
-        $(elem).replaceWith(`\n\n${items.join('\n')}\n\n`);
       });
+
+      // 获取处理后的文本
+      let text = $.text();
       
-      // 处理引用
-      $('blockquote').each((i, elem) => {
-        const text = $(elem).text().trim();
-        $(elem).replaceWith(`\n\n> ${text}\n\n`);
-      });
-      
-      // 处理链接
-      $('a').each((i, elem) => {
-        const text = $(elem).text().trim();
-        const href = $(elem).attr('href');
-        if (text && href) {
-          $(elem).replaceWith(`[${text}](${href})`);
-        }
-      });
-      
-      return this.formatContent($);
+      // 清理特殊字符和多余空白
+      text = text
+        .replace(/\[\s*\.\.\.\s*\]/g, '...') // 处理 [...] 格式
+        .replace(/\s*\n\s*\n\s*\n+/g, '\n\n') // 多个空行转换为两个
+        .replace(/\s+/g, ' ') // 多个空格转换为一个
+        .replace(/\n +/g, '\n') // 行首空格
+        .replace(/\t/g, '') // 移除制表符
+        .trim();
+
+      return text;
     } catch (error) {
-      console.error('清理 HTML 内容失败');
+      console.error('清理内容失败');
       return content;
     }
   }
