@@ -210,74 +210,51 @@ class CrawlerService {
       
       let allArticles = [];
       
-      // 处理常规 RSS 源
+      // 遍历所有 RSS 源
       for (const source of this.rssSources) {
-        if (source.name !== 'arXiv RAG Papers') {
-          try {
-            console.log(`\n抓取源: ${source.name}`);
-            const feed = await this.parser.parseURL(source.url);
-            
-            for (const item of feed.items) {
-              const processedArticle = await this.processRssItem(item, source);
-              if (processedArticle) {
-                allArticles.push(processedArticle);
-              }
+        try {
+          console.log(`\n抓取源: ${source.name}`);
+          console.log('URL:', source.url);
+          
+          const feed = await this.parser.parseURL(source.url);
+          console.log('获取到原始文章数:', feed.items?.length);
+          
+          // 处理每篇文章
+          for (const item of feed.items) {
+            const processedArticle = await this.processRssItem(item, source);
+            if (processedArticle) {
+              allArticles.push(processedArticle);
+              console.log('处理成功:', processedArticle.title);
             }
-          } catch (error) {
-            console.error(`抓取失败: ${source.name}`, error);
-            continue;
           }
+        } catch (error) {
+          console.error(`抓取失败: ${source.name}`, error);
+          continue;
         }
       }
 
-      // 处理 arXiv 论文
-      if (this.arxivPapers) {
-        for (const paper of this.arxivPapers) {
-          const processedArticle = await this.processRssItem(paper, { name: 'arXiv RAG Papers' });
-          if (processedArticle) {
-            allArticles.push(processedArticle);
-          }
-        }
-      }
+      console.log(`\n总共处理 ${allArticles.length} 篇文章`);
 
-      console.log(`\n总共获取到 ${allArticles.length} 篇有效文章`);
-
-      // 保存所有文章
+      // 保存文章
       const savedArticles = [];
       for (const article of allArticles) {
         try {
-          const existingArticle = await Article.findOne({ url: article.link });
-          if (existingArticle) {
-            console.log('已存在，跳过:', article.title);
-            continue;
-          }
-
-          const savedArticle = await Article.create({
-            title: article.title,
-            content: article.content,
-            source: article.source,
-            url: article.link,
-            publishDate: new Date(article.pubDate),
-            category: article.category,
-            isTranslated: false
-          });
-
+          const savedArticle = await Article.create(article);
           console.log('保存成功:', savedArticle.title);
           savedArticles.push(savedArticle);
         } catch (error) {
           console.error('保存失败:', {
-            error: error.message,
             title: article.title,
-            source: article.source
+            error: error.message,
+            details: error
           });
-          continue;
         }
       }
 
       console.log(`\n本次保存: ${savedArticles.length} 篇`);
       return savedArticles;
     } catch (error) {
-      console.error('抓取失败:', error);
+      console.error('抓取过程失败:', error);
       throw error;
     }
   }
