@@ -4,6 +4,26 @@ const Article = require('../models/Article');
 const fetch = require('node-fetch');
 const { translate } = require('@vitalets/google-translate-api');
 
+// 添加延迟函数
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// 带重试的翻译函数
+async function translateWithRetry(text, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      // 添加随机延迟，避免请求过快
+      await delay(1000 + Math.random() * 2000);
+      const result = await translate(text, { to: 'zh-CN' });
+      return result.text;
+    } catch (error) {
+      console.log(`翻译失败，重试次数剩余 ${retries - i - 1}`);
+      if (i === retries - 1) throw error;
+      // 失败后等待更长时间
+      await delay(3000 + Math.random() * 2000);
+    }
+  }
+}
+
 // 获取文章总数
 router.get('/count', async (req, res) => {
   try {
@@ -208,35 +228,38 @@ router.post('/:id/translate', async (req, res) => {
       });
     }
 
-    // 进行翻译
+    // 分步进行翻译，每步都有重试机制
     try {
-      const [titleResult, contentResult] = await Promise.all([
-        translate(article.title, { to: 'zh-CN' }),
-        translate(article.content, { to: 'zh-CN' })
-      ]);
-
+      console.log('开始翻译标题...');
+      const translatedTitle = await translateWithRetry(article.title);
+      
+      console.log('开始翻译内容...');
+      const translatedContent = await translateWithRetry(article.content);
+      
       // 生成摘要并翻译
       const summary = article.content.substring(0, 200) + '...';
-      const summaryResult = await translate(summary, { to: 'zh-CN' });
+      console.log('开始翻译摘要...');
+      const translatedSummary = await translateWithRetry(summary);
 
       // 更新文章
-      article.translatedTitle = titleResult.text;
-      article.translatedContent = contentResult.text;
-      article.translatedSummary = summaryResult.text;
+      article.translatedTitle = translatedTitle;
+      article.translatedContent = translatedContent;
+      article.translatedSummary = translatedSummary;
       article.isTranslated = true;
       await article.save();
 
+      console.log('翻译完成并保存');
       res.json({
         title: article.translatedTitle,
         content: article.translatedContent,
         summary: article.translatedSummary
       });
     } catch (error) {
-      console.error('翻译失败:', error);
-      res.status(500).json({ message: '翻译失败' });
+      console.error('翻译过程失败:', error.message);
+      res.status(500).json({ message: '翻译失败，请稍后重试' });
     }
   } catch (error) {
-    console.error('处理翻译请求失败:', error);
+    console.error('处理翻译请求失败:', error.message);
     res.status(500).json({ message: error.message });
   }
 });
