@@ -550,6 +550,95 @@ class CrawlerService {
     return content.substring(0, 200) + '...';
   }
 
+  async baiduTranslate(text, retries = 3) {
+    if (retries <= 0) {
+      console.log('百度翻译重试次数用完');
+      return null;
+    }
+
+    try {
+      // 检查文本长度限制
+      const maxLength = 6000;
+      if (text.length > maxLength) {
+        console.log('文本超长，进行分段翻译');
+        const parts = [];
+        for (let i = 0; i < text.length; i += maxLength) {
+          const part = text.slice(i, i + maxLength);
+          const translatedPart = await this.baiduTranslate(part, retries);
+          if (translatedPart) {
+            parts.push(translatedPart);
+          } else {
+            throw new Error('分段翻译失败');
+          }
+          // 每段翻译后等待一秒
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        return parts.join('\n');
+      }
+
+      // 生成签名
+      const salt = Date.now().toString();
+      const str = this.BAIDU_APP_ID + text + salt + this.BAIDU_SECRET;
+      const sign = md5(str);
+
+      // 准备请求参数
+      const params = {
+        q: text,
+        from: 'en',
+        to: 'zh',
+        appid: this.BAIDU_APP_ID,
+        salt: salt,
+        sign: sign
+      };
+
+      // 发送请求
+      const response = await fetch('https://fanyi-api.baidu.com/api/trans/vip/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams(params).toString()
+      });
+
+      const result = await response.json();
+
+      // 处理错误码
+      if (result.error_code) {
+        console.log('百度翻译返回错误:', result.error_code, result.error_msg);
+        
+        // 根据错误码处理
+        switch (result.error_code) {
+          case '54003': // 访问频率受限
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return this.baiduTranslate(text, retries - 1);
+          case '52001': // 请求超时
+          case '52002': // 系统错误
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return this.baiduTranslate(text, retries - 1);
+          case '54001': // 签名错误
+            console.error('签名错误，请检查 APP ID 和密钥');
+            return null;
+          default:
+            throw new Error(`百度翻译错误: ${result.error_msg}`);
+        }
+      }
+
+      // 处理翻译结果
+      if (result.trans_result && result.trans_result.length > 0) {
+        return result.trans_result.map(item => item.dst).join('\n');
+      }
+
+      throw new Error('翻译结果为空');
+    } catch (error) {
+      console.error('百度翻译失败:', error.message);
+      if (retries > 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return this.baiduTranslate(text, retries - 1);
+      }
+      return null;
+    }
+  }
+
   async translateText(text) {
     if (!text) return '';
     
@@ -561,45 +650,12 @@ class CrawlerService {
       }
 
       // 如果百度翻译失败，使用 Google 翻译作为备选
-      console.log('百度翻译失败，使用 Google 翻译');
+      console.log('切换到 Google 翻译');
       const { text: googleResult } = await translate(text, { to: 'zh-CN' });
       return googleResult;
     } catch (error) {
       console.error('翻译失败:', error.message);
       throw error;
-    }
-  }
-
-  async baiduTranslate(text) {
-    try {
-      const salt = Date.now();
-      const sign = md5(this.BAIDU_APP_ID + text + salt + this.BAIDU_SECRET);
-      
-      const response = await fetch('https://fanyi-api.baidu.com/api/trans/vip/translate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: new URLSearchParams({
-          q: text,
-          from: 'en',
-          to: 'zh',
-          appid: this.BAIDU_APP_ID,
-          salt: salt.toString(),
-          sign: sign
-        })
-      });
-
-      const result = await response.json();
-      
-      if (result.trans_result) {
-        return result.trans_result.map(item => item.dst).join('\n');
-      }
-      
-      throw new Error(result.error_msg || '百度翻译失败');
-    } catch (error) {
-      console.error('百度翻译失败:', error.message);
-      return null;  // 返回 null 以便切换到 Google 翻译
     }
   }
 }
