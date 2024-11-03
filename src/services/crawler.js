@@ -258,19 +258,27 @@ class CrawlerService {
 
   async processRssItem(item, source) {
     try {
-      console.log('处理文章:', {
-        hasTitle: !!item.title,
-        hasContent: !!(item.content || item.contentSnippet || item.description),
-        hasLink: !!item.link,
-        source: source.name
-      });
+      console.log('处理文章:', item.title);
 
       if (!item.title || !item.link) {
         console.log('文章缺少标题或链接，跳过');
         return null;
       }
 
-      const content = item.content || item.contentSnippet || item.description || '';
+      // 根据不同源��取内容
+      let content = '';
+      switch (source.name) {
+        case 'Microsoft AI Blog':
+          content = await this.fetchMicrosoftContent(item.link);
+          break;
+        case 'Towards Data Science':
+          content = await this.fetchMediumContent(item.link);
+          break;
+        default:
+          content = item.content || item.contentSnippet || item.description || '';
+      }
+
+      // 清理和格式化内容
       const cleanContent = this.cleanHtmlContent(content);
       
       if (!cleanContent) {
@@ -291,147 +299,41 @@ class CrawlerService {
     }
   }
 
-  async processMediumArticle(item) {
-    console.log('处理 Medium 文章');
+  async fetchMicrosoftContent(url) {
     try {
-      // Medium 文章需要特殊处理
-      let content = item.content || item.contentSnippet || item.description || '';
-      content = this.cleanHtmlContent(content);
-      
-      // 如果内容太短，尝试获取完整内容
-      if (content.length < 500 && item.link) {
-        console.log('Medium 文章内容太短，尝试获取完整内容');
-        const fullContent = await this.fetchFullContent(item.link, 'medium');
-        if (fullContent && fullContent.length > content.length) {
-          content = fullContent;
-        }
-      }
-      
-      return content;
-    } catch (error) {
-      console.error('处理 Medium 文章失败:', error);
-      return null;
-    }
-  }
-
-  async processMicrosoftArticle(item) {
-    try {
-      let content = item.content || item.description || '';
-      content = this.cleanHtmlContent(content);
-      
-      if (content.length < 500 && item.link) {
-        const fullContent = await this.fetchFullContent(item.link, 'microsoft');
-        if (fullContent && fullContent.length > content.length) {
-          content = fullContent;
-        }
-      }
-      return content;
-    } catch (error) {
-      console.error('处理 Microsoft 文章失败');
-      return null;
-    }
-  }
-
-  async processTechCrunchArticle(item) {
-    try {
-      if (!item.link) {
-        console.log('没有找到文章链接');
-        return null;
-      }
-
-      console.log('从原文获取完整内容');
-      const response = await fetch(item.link, {
+      const response = await fetch(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Referer': 'https://techcrunch.com'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
       });
-
       const html = await response.text();
       const $ = cheerio.load(html);
+      
+      // Microsoft 博客的主要内容通常在这些选择器中
+      return $('.article-content').text() || 
+             $('.entry-content').text() || 
+             $('main article').text();
+    } catch (error) {
+      console.error('获取 Microsoft 文章内容失败');
+      return '';
+    }
+  }
 
-      // 更新 TechCrunch 文章内容选择器
-      const articleSelectors = [
-        '.article-content',
-        '.article__content',
-        '.article-body',
-        '.post-content',
-        '#article-container',
-        '.article__main',  // 新增
-        'article p',       // 新增：获取所有段落
-        '.content-section' // 新增
-      ];
-
-      let content = '';
-      for (const selector of articleSelectors) {
-        const elements = $(selector);
-        if (elements.length > 0) {
-          // 如果是段落选择器，合并所有段落
-          if (selector === 'article p') {
-            content = elements.map((i, el) => $(el).text()).get().join('\n\n');
-          } else {
-            content = elements.text();
-          }
-          console.log(`使用选择器 ${selector} 成功获取内容`);
-          break;
+  async fetchMediumContent(url) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
-      }
-
-      if (!content) {
-        // 尝试获取所有文本内容
-        content = $('article').text() || $('main').text();
-      }
-
-      if (!content) {
-        console.log('无法获取文章内容');
-        // 如果实获取不到，使用 RSS 中的描述
-        content = item.content || item.description || '';
-      }
-
-      const cleanContent = this.cleanHtmlContent(content);
-      
-      // 检查清理后的内容是否足够长
-      if (cleanContent.length < 100) {
-        console.log('内容太短，可能未正确获取');
-        return null;
-      }
-
-      return cleanContent;
-    } catch (error) {
-      console.error('处理 TechCrunch 文章失败:', error.message);
-      return null;
-    }
-  }
-
-  async processDefaultArticle(item) {
-    console.log('使用默认处理方式');
-    try {
-      let content = item.content || item.contentSnippet || item.description || '';
-      return this.cleanHtmlContent(content);
-    } catch (error) {
-      console.error('处理文章失败:', error);
-      return null;
-    }
-  }
-
-  async fetchFullContent(url, source = 'microsoft') {
-    try {
-      const response = await fetch(url);
+      });
       const html = await response.text();
       const $ = cheerio.load(html);
       
-      if (source === 'microsoft') {
-        return $('.article-content').text() || 
-               $('.entry-content').text() || 
-               $('main article').text() ||
-               $('.post-content').text();
-      }
-      return null;
+      // Medium 文章的主要内容通常在 article 标签中
+      return $('article').text() || $('.story-content').text();
     } catch (error) {
-      console.error('获取完整内容失败');
-      return null;
+      console.error('获取 Medium 文章内容失败');
+      return '';
     }
   }
 
@@ -441,12 +343,15 @@ class CrawlerService {
     try {
       const $ = cheerio.load(content);
       
-      // 移除所有脚本和样式
-      $('script, style').remove();
+      // 移除不需要的元素
+      $('script, style, iframe, nav, header, footer').remove();
       
       // 处理段落
-      $('p').each((i, elem) => {
-        $(elem).after('\n\n');
+      $('p, div').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text) {
+          $(elem).replaceWith(`${text}\n\n`);
+        }
       });
       
       // 处理标题
@@ -456,26 +361,24 @@ class CrawlerService {
       });
       
       // 处理列表
-      $('ul, ol').each((i, elem) => {
-        $(elem).find('li').each((i, li) => {
-          $(li).prepend('• ');
-          $(li).append('\n');
-        });
+      $('li').each((i, elem) => {
+        const text = $(elem).text().trim();
+        $(elem).replaceWith(`• ${text}\n`);
       });
 
       // 获取处理后的文本
       let text = $.text();
       
-      // 清理特殊字符和多余空白
+      // 清理和格式化
       text = text
-        .replace(/\[\s*\.\.\.\s*\]/g, '...') // 处理 [...] 格式
-        .replace(/\s*\n\s*\n\s*\n+/g, '\n\n') // 多个空行转换为两个
-        .replace(/\s+/g, ' ') // 多个空格转换为一个
-        .replace(/\n +/g, '\n') // 行首空格
-        .replace(/\t/g, '') // 移除制表符
-        .trim();
+        .replace(/\n{3,}/g, '\n\n')  // 多个空行转换为两个
+        .replace(/\s+/g, ' ')        // 多个空格转换为一个
+        .split('\n')                 // 按行分割
+        .map(line => line.trim())    // 清理每行
+        .filter(line => line)        // 移除空行
+        .join('\n\n');              // 重新组合，使用两个换行符
 
-      return text;
+      return text.trim();
     } catch (error) {
       console.error('清理内容失败');
       return content;
