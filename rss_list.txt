@@ -1,5 +1,18 @@
-# 只保留一个源进行测试
+# AI 文章源配置
+
+# Medium - Towards Data Science
+https://towardsdatascience.com/feed
+
+# Microsoft AI Blog
+https://blogs.microsoft.com/ai/feed/
+
+# Google AI Blog
 https://blog.research.google/feeds/posts/default
+
+
+
+# 删除文档：curl -X POST https://rss.kids-coder.cn/api/admin/clear-articles
+# 触发抓取：curl -X POST https://rss.kids-coder.cn/api/admin/crawl
 
 
 

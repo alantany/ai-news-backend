@@ -29,10 +29,6 @@ class CrawlerService {
     // 百度翻译配置
     this.BAIDU_APP_ID = '20241103002193055';
     this.BAIDU_SECRET = 'SHHg4TWXNo_HXA2jfso3';
-
-    // 添加 Kimi API 配置
-    this.KIMI_API_KEY = 'sk-A1EGCQmO3fmcZVllvqXnmeUpTQ3WIO9RdXS85rcxgKQm0cRP';
-    this.KIMI_API_URL = 'https://api.moonshot.cn/v1/chat/completions';
   }
 
   initializeCategories() {
@@ -252,7 +248,7 @@ class CrawlerService {
         }
       }
 
-      console.log(`\n本次��: ${savedArticles.length} 篇`);
+      console.log(`\n本次保存: ${savedArticles.length} 篇`);
       return savedArticles;
     } catch (error) {
       console.error('抓取失败:', error);
@@ -260,110 +256,16 @@ class CrawlerService {
     }
   }
 
-  async processWithKimi(title, content, retries = 3) {
-    if (retries <= 0) {
-      throw new Error('超过最大重试次数');
-    }
-
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // 截断内容以适应token限制
-      const maxContentLength = 2000;  // 根据实际情况调整
-      const truncatedContent = content.length > maxContentLength 
-        ? content.substring(0, maxContentLength) + '...'
-        : content;
-
-      console.log('开始处理文章:', title);
-      console.log('内容长度:', content.length, '截断后长度:', truncatedContent.length);
-      
-      const requestBody = {
-        model: "moonshot-v1-8k",
-        messages: [
-          {
-            role: "system",
-            content: "你是一个专业的翻译助手。请将英文文章翻译成中文，保持段落格式。请确保输出格式正确。"
-          },
-          {
-            role: "user",
-            content: `请翻译以下文章，并按格式返回：
-
-标题：${title}
-
-内容：${truncatedContent}
-
-请严格按照以下格式返回（注意不要添加任何额外内容）：
-<title>中文标题</title>
-<content>中文正文</content>
-<summary>中文摘要（200字以内）</summary>`
-          }
-        ],
-        temperature: 0.1,
-        stream: false,
-        max_tokens: 2000  // 限制输出长度
-      };
-
-      const response = await fetch(this.KIMI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.KIMI_API_KEY}`
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      const responseText = await response.text();
-      console.log('Kimi 响应状态:', response.status);
-
-      if (response.status === 429) {
-        console.log('请求过于频繁，等待后重试');
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        return this.processWithKimi(title, content, retries - 1);
-      }
-
-      if (!response.ok) {
-        throw new Error(`API 请求失败: ${response.status}`);
-      }
-
-      const result = JSON.parse(responseText);
-      const output = result.choices[0].message.content;
-      
-      // 使用更严格的正则表达式
-      const titleMatch = output.match(/<title>([^<]+)<\/title>/);
-      const contentMatch = output.match(/<content>([^<]+)<\/content>/);
-      const summaryMatch = output.match(/<summary>([^<]+)<\/summary>/);
-
-      if (!titleMatch || !contentMatch || !summaryMatch) {
-        console.error('解析失败，输出格式不正确');
-        throw new Error('输出格式解析失败');
-      }
-
-      return {
-        translatedTitle: titleMatch[1].trim(),
-        translatedContent: contentMatch[1].trim(),
-        translatedSummary: summaryMatch[1].trim()
-      };
-    } catch (error) {
-      console.error('Kimi 处理失败:', error.message);
-      
-      if (retries > 1) {
-        console.log(`等待后重试，剩余次数: ${retries - 1}`);
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        return this.processWithKimi(title, content, retries - 1);
-      }
-      
-      throw error;
-    }
-  }
-
   async processRssItem(item, source) {
     try {
+      console.log('处理文章:', item.title);
+
       if (!item.title || !item.link) {
         console.log('文章缺少标题或链接，跳过');
         return null;
       }
 
-      // 获取原始内容
+      // 根据不同源取内容
       let content = '';
       switch (source.name) {
         case 'Microsoft AI Blog':
@@ -376,24 +278,20 @@ class CrawlerService {
           content = item.content || item.contentSnippet || item.description || '';
       }
 
-      if (!content) {
-        console.log('获取内容失败');
+      // 清理和格式化内容
+      const cleanContent = this.cleanHtmlContent(content);
+      
+      if (!cleanContent) {
+        console.log('清理后的内容为空，跳过');
         return null;
       }
 
-      // 使用 Kimi 处理内容
-      const processed = await this.processWithKimi(item.title, content);
-      
       return {
         title: item.title.trim(),
-        content: content,
-        translatedTitle: processed.translatedTitle,
-        translatedContent: processed.translatedContent,
-        translatedSummary: processed.translatedSummary,
+        content: cleanContent,
         link: item.link,
         pubDate: item.pubDate || item.isoDate || new Date(),
-        source: source.name,
-        isTranslated: true
+        source: source.name
       };
     } catch (error) {
       console.error('处理文章失败:', error);
@@ -437,6 +335,72 @@ class CrawlerService {
       console.error('获取 Medium 文章内容失败');
       return '';
     }
+  }
+
+  cleanHtmlContent(content) {
+    if (!content) return '';
+    
+    try {
+      const $ = cheerio.load(content);
+      
+      // 移除不需要的元素
+      $('script, style, iframe, nav, header, footer').remove();
+      
+      let paragraphs = [];
+      
+      // 处理段落
+      $('p, div').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text) {
+          paragraphs.push(text);
+        }
+      });
+
+      // 如果没有找到段落标签，尝试按照换行符分割
+      if (paragraphs.length === 0) {
+        const plainText = $.text().trim();
+        paragraphs = plainText
+          .split(/\n+/)  // 按一个或多个换行符分割
+          .map(p => p.trim())
+          .filter(p => p.length > 0);
+      }
+
+      // 如果还是没有段落，尝试按照句号分割
+      if (paragraphs.length === 0) {
+        const plainText = $.text().trim();
+        paragraphs = plainText
+          .split(/[.。!！?？]\s+/)  // 按标点符号分割
+          .map(p => p.trim() + '。')  // 添加句号
+          .filter(p => p.length > 0);
+      }
+
+      // 合并段落，使用双换行符
+      let formattedText = paragraphs.join('\n\n');
+
+      // 清理格式
+      formattedText = formattedText
+        .replace(/\s+/g, ' ')         // 合并空格
+        .replace(/ +/g, ' ')          // 多个空格变成一个
+        .replace(/\n\s+/g, '\n\n')    // 清理段落之间的空白
+        .replace(/\n{3,}/g, '\n\n')   // 多个换行变成两个
+        .trim();
+
+      console.log('段落数量:', paragraphs.length);
+      return formattedText;
+    } catch (error) {
+      console.error('清理内容失败');
+      return content;
+    }
+  }
+
+  formatContent($) {
+    // 移除所有内容相关的日志
+    return $.text().trim();
+  }
+
+  generateSummary(content) {
+    // 简单地截取前200个字符作为摘要
+    return content.substring(0, 200) + '...';
   }
 
   async translateText(text) {
