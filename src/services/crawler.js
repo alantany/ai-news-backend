@@ -265,7 +265,7 @@ class CrawlerService {
         return null;
       }
 
-      // 根据不同源��取内容
+      // 根据不同源取内容
       let content = '';
       switch (source.name) {
         case 'Microsoft AI Blog':
@@ -346,39 +346,47 @@ class CrawlerService {
       // 移除不需要的元素
       $('script, style, iframe, nav, header, footer').remove();
       
+      let paragraphs = [];
+      
       // 处理段落
       $('p, div').each((i, elem) => {
         const text = $(elem).text().trim();
         if (text) {
-          $(elem).replaceWith(`${text}\n\n`);
+          paragraphs.push(text);
         }
       });
-      
-      // 处理标题
-      $('h1, h2, h3, h4, h5, h6').each((i, elem) => {
-        const text = $(elem).text().trim();
-        $(elem).replaceWith(`\n\n${text}\n\n`);
-      });
-      
-      // 处理列表
-      $('li').each((i, elem) => {
-        const text = $(elem).text().trim();
-        $(elem).replaceWith(`• ${text}\n`);
-      });
 
-      // 获取处理后的文本
-      let text = $.text();
-      
-      // 清理和格式化
-      text = text
-        .replace(/\n{3,}/g, '\n\n')  // 多个空行转换为两个
-        .replace(/\s+/g, ' ')        // 多个空格转换为一个
-        .split('\n')                 // 按行分割
-        .map(line => line.trim())    // 清理每行
-        .filter(line => line)        // 移除空行
-        .join('\n\n');              // 重新组合，使用两个换行符
+      // 如果没有找到段落标签，尝试按照换行符分割
+      if (paragraphs.length === 0) {
+        const plainText = $.text().trim();
+        paragraphs = plainText
+          .split(/\n+/)  // 按一个或多个换行符分割
+          .map(p => p.trim())
+          .filter(p => p.length > 0);
+      }
 
-      return text.trim();
+      // 如果还是没有段落，尝试按照句号分割
+      if (paragraphs.length === 0) {
+        const plainText = $.text().trim();
+        paragraphs = plainText
+          .split(/[.。!！?？]\s+/)  // 按标点符号分割
+          .map(p => p.trim() + '。')  // 添加句号
+          .filter(p => p.length > 0);
+      }
+
+      // 合并段落，使用双换行符
+      let formattedText = paragraphs.join('\n\n');
+
+      // 清理格式
+      formattedText = formattedText
+        .replace(/\s+/g, ' ')         // 合并空格
+        .replace(/ +/g, ' ')          // 多个空格变成一个
+        .replace(/\n\s+/g, '\n\n')    // 清理段落之间的空白
+        .replace(/\n{3,}/g, '\n\n')   // 多个换行变成两个
+        .trim();
+
+      console.log('段落数量:', paragraphs.length);
+      return formattedText;
     } catch (error) {
       console.error('清理内容失败');
       return content;
