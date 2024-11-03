@@ -252,7 +252,7 @@ class CrawlerService {
         }
       }
 
-      console.log(`\n本次��存: ${savedArticles.length} 篇`);
+      console.log(`\n本次存: ${savedArticles.length} 篇`);
       return savedArticles;
     } catch (error) {
       console.error('抓取失败:', error);
@@ -275,46 +275,44 @@ class CrawlerService {
           messages: [
             {
               role: 'system',
-              content: `你是一个专业的文档处理助手。请帮我完成以下任务：
-1. 将英文文章翻译成中文
-2. 保持适当的段落分隔（使用两个换行符）
-3. 确保专业术语的准确性
-4. 保持文章的逻辑结构
-5. 返回格式如下：
-[标题]
-中文标题
-[/标题]
-[内容]
-中文内容（分段格式）
-[/内容]
-[摘要]
-中文摘要（200字以内）
-[/摘要]`
+              content: '你是一个专业的翻译和排版助手。请将英文文章翻译成中文，并保持适当的段落分隔。'
             },
             {
               role: 'user',
-              content: `标题：${title}\n\n正文：${content}`
+              content: `请按照以下格式处理这篇文章：
+1. 翻译标题和正文
+2. 生成200字以内的中文摘要
+3. 使用 <title>标题</title> <content>正文</content> <summary>摘要</summary> 标记返回结果
+
+原文标题：${title}
+
+原文内容：${content}`
             }
           ],
-          temperature: 0.1
+          temperature: 0.1,
+          max_tokens: 4000
         })
       });
 
       const result = await response.json();
       console.log('Kimi 响应状态:', response.status);
       
+      // 打印完整响应用于调试
+      console.log('Kimi 响应内容:', result.choices[0].message.content);
+
       if (!result.choices || !result.choices[0]) {
         throw new Error('Kimi API 返回格式错误');
       }
 
       const output = result.choices[0].message.content;
       
-      // 解析返回的内容
-      const titleMatch = output.match(/\[标题\]([\s\S]*?)\[\/标题\]/);
-      const contentMatch = output.match(/\[内容\]([\s\S]*?)\[\/内容\]/);
-      const summaryMatch = output.match(/\[摘要\]([\s\S]*?)\[\/摘要\]/);
+      // 使用新的标记格式解析
+      const titleMatch = output.match(/<title>([\s\S]*?)<\/title>/);
+      const contentMatch = output.match(/<content>([\s\S]*?)<\/content>/);
+      const summaryMatch = output.match(/<summary>([\s\S]*?)<\/summary>/);
 
       if (!titleMatch || !contentMatch || !summaryMatch) {
+        console.error('解析失败，原始输出:', output);
         throw new Error('输出格式解析失败');
       }
 
