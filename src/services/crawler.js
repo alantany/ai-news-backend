@@ -87,21 +87,53 @@ class CrawlerService {
       const content = await fs.readFile(rssListPath, 'utf-8');
       const urls = content.split('\n')
         .map(line => line.trim())
-        .filter(line => line && !line.startsWith('#')); // 忽略空行和注释
+        .filter(line => line && !line.startsWith('#'));
 
-      console.log('加载RSS源:', urls);
-      
       this.rssSources = urls.map(url => ({
         name: this.getRssSourceName(url),
         url: url
       }));
+
+      // 如果配置了 arXiv，添加 RAG 论文源
+      if (this.rssSources.some(s => s.name === 'arXiv RAG Papers')) {
+        await this.loadArxivPapers();
+      }
     } catch (error) {
-      console.error('加载RSS源失败:', error);
-      // 使默认值
-      this.rssSources = [{
-        name: 'Towards Data Science',
-        url: 'https://towardsdatascience.com/feed'
-      }];
+      console.error('加载 RSS 源失败:', error);
+      this.rssSources = [];
+    }
+  }
+
+  async loadArxivPapers() {
+    try {
+      console.log('获取 arXiv RAG 论文...');
+      const query = encodeURIComponent('all:"Retrieval Augmented Generation" OR all:RAG');
+      const url = `http://export.arxiv.org/api/query?search_query=${query}&sortBy=submittedDate&sortOrder=descending&max_results=5`;
+      
+      const response = await fetch(url);
+      const xml = await response.text();
+      const $ = cheerio.load(xml, { xmlMode: true });
+      
+      // 解析每篇论文
+      const papers = [];
+      $('entry').each((i, entry) => {
+        const $entry = $(entry);
+        papers.push({
+          title: $entry.find('title').text(),
+          link: $entry.find('id').text(),
+          description: $entry.find('summary').text(),
+          pubDate: new Date($entry.find('published').text()),
+          source: 'arXiv RAG Papers'
+        });
+      });
+
+      // 将论文添加到 RSS items
+      if (papers.length > 0) {
+        this.arxivPapers = papers;
+        console.log(`找到 ${papers.length} 篇 RAG 相关论文`);
+      }
+    } catch (error) {
+      console.error('获取 arXiv 论文失败:', error);
     }
   }
 
@@ -175,42 +207,35 @@ class CrawlerService {
       await this.loadRssSources();
       console.log('\n============= 开始抓取文章 =============');
       
-      const settings = await Setting.findOne() || { preArticlesPerSource: 5 };
-      const articlesPerSource = settings.preArticlesPerSource || 5;
-      console.log(`每个源抓取数量: ${articlesPerSource}`);
-      
       let allArticles = [];
       
-      // 遍历所有 RSS 源
+      // 处理常规 RSS 源
       for (const source of this.rssSources) {
-        try {
-          console.log(`\n抓取源: ${source.name}`);
-          const feed = await this.parser.parseURL(source.url);
-          console.log('RSS 响应:', {
-            itemCount: feed.items.length,
-            hasItems: !!feed.items,
-            source: source.name
-          });
-          
-          // 获取每个源的前 N 篇文章
-          const articles = [];
-          for (const item of feed.items.slice(0, articlesPerSource)) {
-            const processedArticle = await this.processRssItem(item, source);
-            if (processedArticle) {
-              const scoreResult = this.calculateArticleScore(processedArticle.title, source.name);
-              articles.push({
-                ...processedArticle,
-                score: scoreResult.score,
-                category: scoreResult.category
-              });
+        if (source.name !== 'arXiv RAG Papers') {
+          try {
+            console.log(`\n抓取源: ${source.name}`);
+            const feed = await this.parser.parseURL(source.url);
+            
+            for (const item of feed.items) {
+              const processedArticle = await this.processRssItem(item, source);
+              if (processedArticle) {
+                allArticles.push(processedArticle);
+              }
             }
+          } catch (error) {
+            console.error(`抓取失败: ${source.name}`, error);
+            continue;
           }
+        }
+      }
 
-          allArticles.push(...articles);
-          console.log(`获取到 ${articles.length} 篇有效文章`);
-        } catch (error) {
-          console.error(`抓取失败: ${source.name}`, error);
-          continue;
+      // 处理 arXiv 论文
+      if (this.arxivPapers) {
+        for (const paper of this.arxivPapers) {
+          const processedArticle = await this.processRssItem(paper, { name: 'arXiv RAG Papers' });
+          if (processedArticle) {
+            allArticles.push(processedArticle);
+          }
         }
       }
 

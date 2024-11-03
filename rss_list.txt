@@ -5,7 +5,7 @@
 # https://blog.research.google/feeds/posts/default
 
 # arXiv RAG Papers
-https://export.arxiv.org/rss/search_query?all=Retrieval+Augmented+Generation+RAG&abstracts=show&size=5&order=-announced_date_first
+arXiv:RAG
 
 
 
