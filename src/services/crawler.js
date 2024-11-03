@@ -451,7 +451,8 @@ class CrawlerService {
 
   async processArxivArticle(item) {
     try {
-      const arxivId = item.link.match(/abs\/([\d.]+)/)?.[1];
+      const arxivId = item.id.match(/abs\/([\d.]+)/)?.[1] || 
+                     item.link.match(/abs\/([\d.]+)/)?.[1];
       if (!arxivId) {
         console.log('无法获取 arXiv ID');
         return null;
@@ -467,22 +468,25 @@ class CrawlerService {
       const authors = $('.authors').text().trim();
       
       // 提取摘要
-      const abstract = $('.abstract').text().trim();
+      const abstract = $('.abstract').text()
+        .replace('Abstract:', '')  // 移除 "Abstract:" 前缀
+        .trim();
       
-      // 提取正文（按章节处理）
+      // 提取正文并处理章节标题
       const sections = [];
       $('.ltx_section').each((i, section) => {
         const title = $(section).find('.ltx_title').first().text().trim();
         const content = $(section).find('p').map((i, p) => $(p).text().trim()).get().join('\n\n');
         if (title && content) {
-          sections.push(`## ${title}\n\n${content}`);
+          // 使用特殊标记来标识标题，以便在小程序中设置样式
+          sections.push(`<title>${title}</title>\n\n${content}`);
         }
       });
 
-      // 组合所有内容
+      // 组合所有内容，使用特殊标记区分不同部分
       const fullContent = [
-        `作者: ${authors}`,
-        `\n摘要:\n${abstract}`,
+        `<authors>${authors}</authors>`,
+        `\n<abstract>摘要：\n${abstract}</abstract>`,
         ...sections
       ].join('\n\n');
 
