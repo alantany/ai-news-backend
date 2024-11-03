@@ -5,7 +5,7 @@
 # https://blog.research.google/feeds/posts/default
 
 # arXiv RAG Papers
-arXiv:RAG
+http://export.arxiv.org/api/query?search_query=all:"Retrieval+Augmented+Generation"+OR+all:RAG&sortBy=submittedDate&sortOrder=descending&max_results=5
 
 
 

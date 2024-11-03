@@ -140,7 +140,8 @@ class CrawlerService {
   getRssSourceName(url) {
     if (url.includes('towardsdatascience.com')) return 'Towards Data Science';
     if (url.includes('blogs.microsoft.com')) return 'Microsoft AI Blog';
-    if (url.includes('techcrunch.com')) return 'TechCrunch AI';
+    if (url.includes('blog.research.google')) return 'Google AI Blog';
+    if (url.includes('arxiv.org')) return 'arXiv RAG Papers';
     return new URL(url).hostname;
   }
 
@@ -290,10 +291,9 @@ class CrawlerService {
         return null;
       }
 
-      // 根据源选择不同的处理方法
       let content = '';
       
-      if (source.name === 'arXiv AI Papers') {
+      if (source.name === 'arXiv RAG Papers') {
         const arxivContent = await this.processArxivArticle(item);
         if (!arxivContent) {
           console.log('arXiv 文章处理失败');
@@ -301,7 +301,6 @@ class CrawlerService {
         }
         content = arxivContent;
       } else {
-        // 保持原有源的处理逻辑不变
         content = item.content || item.contentSnippet || item.description || '';
         content = this.cleanHtmlContent(content);
       }
