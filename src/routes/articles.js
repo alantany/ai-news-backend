@@ -83,18 +83,18 @@ router.post('/:id/like', async (req, res) => {
 // 获取文章详情
 router.get('/:id', async (req, res) => {
   try {
+    console.log('获取文章详情，ID:', req.params.id);
     const article = await Article.findById(req.params.id);
+    
     if (!article) {
+      console.log('文章不存在');
       return res.status(404).json({ message: '文章不存在' });
     }
-    
-    // 更新浏览量
-    article.views = (article.views || 0) + 1;
-    await article.save();
-    
+
+    console.log('文章获取成功，内容长度:', article.content?.length || 0);
     res.json(article);
   } catch (error) {
-    console.error('获取文章详情错误:', error);
+    console.error('获取文章详情失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -214,8 +214,11 @@ router.get('/proxy/:id', async (req, res) => {
 // 获取或创建文章翻译
 router.post('/:id/translate', async (req, res) => {
   try {
+    console.log('翻译文章，ID:', req.params.id);
     const article = await Article.findById(req.params.id);
+    
     if (!article) {
+      console.log('文章不存在');
       return res.status(404).json({ message: '文章不存在' });
     }
 
@@ -259,7 +262,7 @@ router.post('/:id/translate', async (req, res) => {
       res.status(500).json({ message: '翻译失败，请稍后重试' });
     }
   } catch (error) {
-    console.error('处理翻译请求失败:', error.message);
+    console.error('翻译文章失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
