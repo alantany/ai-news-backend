@@ -1,9 +1,10 @@
-# Medium 文章源（已处理好）
-# https://towardsdatascience.com/feed
+# AI 文章源配置
 
-# Microsoft AI Blog（已处理好）
-# https://blogs.microsoft.com/ai/feed/
+# Medium - Towards Data Science
+https://towardsdatascience.com/feed
 
+# Microsoft AI Blog
+https://blogs.microsoft.com/ai/feed/
 
 # Google AI Blog
 https://blog.research.google/feeds/posts/default

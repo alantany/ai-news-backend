@@ -107,36 +107,62 @@ class CrawlerService {
     return new URL(url).hostname;
   }
 
-  calculateArticleScore(title = '') {
+  calculateArticleScore(title = '', source = '') {
     const titleLower = title.toLowerCase();
+    let baseScore = 0;
+    let category = 'GENERAL_AI';
     
     // RAG 相关 (最高优先级)
     if (titleLower.includes('rag') || 
         titleLower.includes('retrieval') ||
-        titleLower.includes('vector database')) {
-      return { score: 100, category: 'RAG' };
+        titleLower.includes('vector') ||
+        titleLower.includes('embedding') ||
+        titleLower.includes('knowledge base')) {
+      baseScore = 100;
+      category = 'RAG';
     }
-    
     // LLM 开发相关 (次高优先级)
-    if (titleLower.includes('llm') || 
+    else if (titleLower.includes('llm') || 
         titleLower.includes('fine-tun') ||
         titleLower.includes('train') ||
         titleLower.includes('prompt') ||
-        titleLower.includes('model development')) {
-      return { score: 80, category: 'LLM_DEV' };
+        titleLower.includes('model') ||
+        titleLower.includes('neural') ||
+        titleLower.includes('transformer')) {
+      baseScore = 80;
+      category = 'LLM_DEV';
     }
-    
     // LLM 通用技术 (中等优先级)
-    if (titleLower.includes('gpt') || 
+    else if (titleLower.includes('gpt') || 
         titleLower.includes('claude') ||
         titleLower.includes('gemini') ||
         titleLower.includes('llama') ||
-        titleLower.includes('language model')) {
-      return { score: 60, category: 'LLM_NEWS' };
+        titleLower.includes('language model') ||
+        titleLower.includes('chat') ||
+        titleLower.includes('foundation model')) {
+      baseScore = 60;
+      category = 'LLM_NEWS';
     }
-    
     // AI 通用 (最低优先级)
-    return { score: 40, category: 'GENERAL_AI' };
+    else {
+      baseScore = 40;
+      category = 'GENERAL_AI';
+    }
+
+    // 来源权重
+    let sourceBonus = 0;
+    if (source.includes('microsoft')) {
+      sourceBonus = 20;  // Microsoft 的文章加分
+    } else if (source.includes('towardsdatascience')) {
+      sourceBonus = 15;  // Medium 的文章加分
+    } else if (source.includes('research.google')) {
+      sourceBonus = 10;  // Google 的文章加分
+    }
+
+    return {
+      score: baseScore + sourceBonus,
+      category
+    };
   }
 
   async crawl() {
@@ -163,7 +189,7 @@ class CrawlerService {
             try {
               const processedArticle = await this.processRssItem(item, source);
               if (processedArticle && processedArticle.content) {
-                const scoreResult = this.calculateArticleScore(processedArticle.title);
+                const scoreResult = this.calculateArticleScore(processedArticle.title, source.name);
                 allArticles.push({
                   ...processedArticle,
                   score: scoreResult.score,
@@ -401,7 +427,7 @@ class CrawlerService {
 
       if (!content) {
         console.log('无法获取文章内容');
-        // 如果实在获取不到，使用 RSS 中的描述
+        // 如果实���获取不到，使用 RSS 中的描述
         content = item.content || item.description || '';
       }
 
