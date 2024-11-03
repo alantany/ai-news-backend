@@ -3,9 +3,9 @@ const cors = require('cors');
 const connectDB = require('./config/database');
 const cron = require('node-cron');
 const CrawlerService = require('./services/crawler');
+const Setting = require('./models/Setting');
 const Article = require('./models/Article');
 const { translate } = require('@vitalets/google-translate-api');
-const Setting = require('./models/Setting');
 require('dotenv').config();
 
 const app = express();
@@ -25,7 +25,59 @@ function generateSummary(content, length = 100) {
   return content.length > length ? content.substring(0, length) + '...' : content;
 }
 
-let crawlJob = null;  // 用于存储定时任务实例
+// 翻译未翻译的文章
+async function translateUntranslatedArticles() {
+  try {
+    console.log('\n============= 开始翻译未翻译文章 =============');
+    
+    // 查找未翻译的文章
+    const untranslatedArticles = await Article.find({
+      $or: [
+        { translatedTitle: { $exists: false } },
+        { translatedContent: { $exists: false } },
+        { translatedTitle: null },
+        { translatedContent: null }
+      ]
+    });
+    
+    console.log(`找到 ${untranslatedArticles.length} 篇未翻译的文章`);
+
+    // 翻译文章
+    for (const article of untranslatedArticles) {
+      try {
+        console.log(`翻译文章: ${article.title}`);
+        
+        // 翻译标题和内容
+        const [titleResult, contentResult] = await Promise.all([
+          translate(article.title, { to: 'zh-CN' }),
+          translate(article.content, { to: 'zh-CN' })
+        ]);
+
+        // 更新文章
+        article.translatedTitle = titleResult.text;
+        article.translatedContent = contentResult.text;
+        article.translatedSummary = generateSummary(contentResult.text);
+        article.summary = generateSummary(article.content);
+        article.isTranslated = true;
+        
+        await article.save();
+        console.log('翻译完成并保存');
+        
+        // 添加延迟避免请求过快
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`翻译文章失败: ${article.title}`, error);
+        continue;
+      }
+    }
+
+    console.log('所有未翻译文章处理完成');
+  } catch (error) {
+    console.error('翻译过程失败:', error);
+  }
+}
+
+let crawlJob = null;
 
 // 更新定时任务
 async function updateCrawlJob() {
@@ -36,16 +88,14 @@ async function updateCrawlJob() {
       return;
     }
 
-    // 停止现有的定时任务
     if (crawlJob) {
       crawlJob.stop();
       console.log('停止旧的定时任务');
     }
 
-    // 如果启用了自动抓取
     if (settings.autoCrawl) {
-      const interval = settings.crawlInterval || 60;  // 默认60分钟
-      const cronExpression = `*/${interval} * * * *`;  // 每 x 分钟执行一次
+      const interval = settings.crawlInterval || 60;
+      const cronExpression = `*/${interval} * * * *`;
       
       console.log('设置新的定时任务:', {
         interval,
@@ -58,15 +108,16 @@ async function updateCrawlJob() {
           console.log('\n============= 开始定时抓取 =============');
           console.log('当前时间:', new Date().toISOString());
           
+          // 1. 抓取新文章
           const crawler = new CrawlerService();
           await crawler.crawl();
           
-          // 翻译未翻译的文章
+          // 2. 翻译未翻译的文章
           await translateUntranslatedArticles();
           
-          console.log('定时抓取完成');
+          console.log('定时任务完成');
         } catch (error) {
-          console.error('定时抓取失败:', error);
+          console.error('定时任务失败:', error);
         }
       });
 
