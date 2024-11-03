@@ -349,7 +349,15 @@ class CrawlerService {
       let paragraphs = [];
       
       // 处理段落
-      $('p, div').each((i, elem) => {
+      $('p').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text) {
+          paragraphs.push(text);
+        }
+      });
+
+      // 处理标题
+      $('h1, h2, h3, h4, h5, h6').each((i, elem) => {
         const text = $(elem).text().trim();
         if (text) {
           paragraphs.push(text);
@@ -360,33 +368,13 @@ class CrawlerService {
       if (paragraphs.length === 0) {
         const plainText = $.text().trim();
         paragraphs = plainText
-          .split(/\n+/)  // 按一个或多个换行符分割
+          .split(/\n+/)
           .map(p => p.trim())
           .filter(p => p.length > 0);
       }
 
-      // 如果还是没有段落，尝试按照句号分割
-      if (paragraphs.length === 0) {
-        const plainText = $.text().trim();
-        paragraphs = plainText
-          .split(/[.。!！?？]\s+/)  // 按标点符号分割
-          .map(p => p.trim() + '。')  // 添加句号
-          .filter(p => p.length > 0);
-      }
-
-      // 合并段落，使用双换行符
-      let formattedText = paragraphs.join('\n\n');
-
-      // 清理格式
-      formattedText = formattedText
-        .replace(/\s+/g, ' ')         // 合并空格
-        .replace(/ +/g, ' ')          // 多个空格变成一个
-        .replace(/\n\s+/g, '\n\n')    // 清理段落之间的空白
-        .replace(/\n{3,}/g, '\n\n')   // 多个换行变成两个
-        .trim();
-
-      console.log('段落数量:', paragraphs.length);
-      return formattedText;
+      // 使用双换行符连接段落
+      return paragraphs.join('\n\n');
     } catch (error) {
       console.error('清理内容失败');
       return content;
