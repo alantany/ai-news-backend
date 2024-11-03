@@ -365,23 +365,32 @@ class CrawlerService {
     if (!content) return '';
     
     try {
-      // 移除作者和摘要部分
+      // 先移除所有作者和摘要相关的内容
       let cleanedContent = content
-        .replace(/<作者>.*?<\/作者>/g, '')
-        .replace(/<摘要>.*?<\/摘要>/g, '')
-        .replace(/作者:.*?\n/g, '')
-        .replace(/摘要:.*?\n/g, '')
+        // 移除XML样式标签
+        .replace(/<作者>[\s\S]*?<\/作者>/g, '')
+        .replace(/<摘要>[\s\S]*?<\/摘要>/g, '')
+        // 移除普通文本格式
+        .replace(/作者[\s\S]*?\n/g, '')
+        .replace(/摘要[\s\S]*?\n/g, '')
+        // 移除其他可能的格式
+        .replace(/Authors?:[\s\S]*?\n/g, '')
+        .replace(/Abstract:[\s\S]*?\n/g, '')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
+
+      // 如果内容以换行开始，移除开头的换行
+      while (cleanedContent.startsWith('\n')) {
+        cleanedContent = cleanedContent.substring(1);
+      }
 
       const $ = cheerio.load(cleanedContent);
       
       // 移除不需要的元素
       $('script, style, iframe, nav, header, footer').remove();
       
+      // 只保留正文段落
       let paragraphs = [];
-      
-      // 处理段落
       $('p').each((i, elem) => {
         const text = $(elem).text().trim();
         if (text) {
@@ -389,15 +398,16 @@ class CrawlerService {
         }
       });
 
-      // 如果没有找到段落标签，尝试按换行符分割
+      // 如果没有找到段落标签，按换行符分割
       if (paragraphs.length === 0) {
         paragraphs = cleanedContent
           .split(/\n+/)
           .map(p => p.trim())
-          .filter(p => p.length > 0);
+          .filter(p => p.length > 0)
+          .filter(p => !p.includes('作者') && !p.includes('摘要')); // 额外过滤
       }
 
-      // 使用双换行符连接段落
+      console.log('清理后的段落数:', paragraphs.length);
       return paragraphs.join('\n\n');
     } catch (error) {
       console.error('清理内容失败');
@@ -411,8 +421,15 @@ class CrawlerService {
   }
 
   generateSummary(content) {
-    // 简单地截取前200个字符作为摘要
-    return content.substring(0, 200) + '...';
+    // 确保移除所有标签和作者信息
+    const cleanContent = content
+      .replace(/<[^>]+>/g, '')
+      .replace(/作者[\s\S]*?\n/g, '')
+      .replace(/Authors?:[\s\S]*?\n/g, '')
+      .trim();
+
+    // 取前200个字符
+    return cleanContent.substring(0, 200) + '...';
   }
 
   async translateText(text) {
