@@ -18,6 +18,12 @@ app.use(cors({
 
 app.use(express.json());
 
+// 生成摘要
+function generateSummary(content, length = 100) {
+  if (!content) return '';
+  return content.length > length ? content.substring(0, length) + '...' : content;
+}
+
 // 连接数据库
 connectDB().then(() => {
   console.log('数据库连接成功');
@@ -57,6 +63,8 @@ connectDB().then(() => {
           // 更新文章
           article.translatedTitle = titleResult.text;
           article.translatedContent = contentResult.text;
+          article.translatedSummary = generateSummary(contentResult.text);
+          article.summary = generateSummary(article.content);
           article.isTranslated = true;
           
           await article.save();
