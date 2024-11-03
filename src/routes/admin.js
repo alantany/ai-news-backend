@@ -57,14 +57,19 @@ router.get('/settings', async (req, res) => {
 router.post('/settings', async (req, res) => {
   try {
     console.log('更新设置请求:', req.body);
-    const settings = await Setting.findOneAndUpdate(
-      {},
-      req.body,
-      { new: true, upsert: true }
-    );
-    res.json(settings);
+    
+    const settings = await Setting.findOne();
+    if (settings) {
+      Object.assign(settings, req.body);
+      await settings.save();
+    } else {
+      await Setting.create(req.body);
+    }
+
+    console.log('设置已更新');
+    res.json({ message: '设置已更新' });
   } catch (error) {
-    console.error('更新设置错误:', error);
+    console.error('更新设置失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
