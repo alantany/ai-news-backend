@@ -38,26 +38,15 @@ router.get('/count', async (req, res) => {
 // 获取文章列表
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, pageSize = 10 } = req.query;
-    const skip = (page - 1) * pageSize;
-
-    const [articles, total] = await Promise.all([
-      Article.find()
-        .select('title summary source url publishDate likes views category')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(pageSize)),
-      Article.countDocuments()
-    ]);
-
-    res.json({
-      articles,
-      total,
-      currentPage: parseInt(page),
-      totalPages: Math.ceil(total / pageSize)
-    });
+    console.log('获取文章列表请求');
+    const articles = await Article.find({})
+      .sort({ publishDate: -1 })
+      .select('title translatedTitle source publishDate summary translatedSummary');
+    
+    console.log('文章列表数据示例:', articles[0]);
+    res.json(articles);
   } catch (error) {
-    console.error('获取文章列表错误:', error);
+    console.error('获取文章列表失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
