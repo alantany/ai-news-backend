@@ -25,6 +25,17 @@ function generateSummary(content, length = 100) {
   return content.length > length ? content.substring(0, length) + '...' : content;
 }
 
+// 清理摘要中的标签
+function cleanSummary(text) {
+  return text
+    .replace(/<作者>.*?<\/作者>/g, '')
+    .replace(/<摘要>/g, '')
+    .replace(/<\/摘要>/g, '')
+    .replace(/作者:.+?\n/g, '')
+    .replace(/摘要:.+?\n/g, '')
+    .trim();
+}
+
 // 翻译未翻译的文章
 async function translateUntranslatedArticles() {
   try {
@@ -74,8 +85,8 @@ async function translateUntranslatedArticles() {
             $set: {
               translatedTitle: titleResult.text,
               translatedContent: contentResult.text,
-              summary: summary,
-              translatedSummary: summaryResult.text,
+              summary: cleanSummary(summary),
+              translatedSummary: cleanSummary(summaryResult.text),
               isTranslated: true
             }
           },
