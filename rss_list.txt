@@ -1,13 +1,11 @@
-# AI 文章源配置
+# Microsoft AI Blog（已测试通过）
+# https://blogs.microsoft.com/ai/feed/
 
-# Medium - Towards Data Science
-https://towardsdatascience.com/feed
+# Google AI Blog（已测试通过）
+# https://blog.research.google/feeds/posts/default
 
-# Microsoft AI Blog
-https://blogs.microsoft.com/ai/feed/
-
-# Google AI Blog
-https://blog.research.google/feeds/posts/default
+# arXiv RAG Papers
+https://export.arxiv.org/rss/search_query?all=Retrieval+Augmented+Generation+RAG&abstracts=show&size=5&order=-announced_date_first
 
 
 

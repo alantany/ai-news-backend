@@ -265,15 +265,20 @@ class CrawlerService {
         return null;
       }
 
-      // 根据不同源获取和处理内容
+      // 根据源选择不同的处理方法
       let content = '';
-      switch (source.name) {
-        case 'Towards Data Science':
-          content = await this.processMediumContent(item);
-          break;
-        default:
-          content = item.content || item.contentSnippet || item.description || '';
-          content = this.cleanHtmlContent(content);
+      
+      if (source.name === 'arXiv AI Papers') {
+        const arxivContent = await this.processArxivArticle(item);
+        if (!arxivContent) {
+          console.log('arXiv 文章处理失败');
+          return null;
+        }
+        content = arxivContent;
+      } else {
+        // 保持原有源的处理逻辑不变
+        content = item.content || item.contentSnippet || item.description || '';
+        content = this.cleanHtmlContent(content);
       }
 
       if (!content) {
@@ -290,51 +295,6 @@ class CrawlerService {
       };
     } catch (error) {
       console.error('处理文章失败:', error);
-      return null;
-    }
-  }
-
-  async processMediumContent(item) {
-    try {
-      // 获取原始内容
-      let content = item.content || item.contentSnippet || item.description || '';
-      
-      // 使用 cheerio 解析 HTML
-      const $ = cheerio.load(content);
-      
-      let paragraphs = [];
-      
-      // 处理 Medium 特有的格式
-      $('.medium-feed-snippet').each((i, elem) => {
-        const text = $(elem).text().trim();
-        if (text) {
-          paragraphs.push(text);
-        }
-      });
-      
-      // 处理其他可能的段落
-      $('p').each((i, elem) => {
-        const text = $(elem).text().trim();
-        if (text && !text.includes('Continue reading on')) {
-          paragraphs.push(text);
-        }
-      });
-
-      // 如果没有找到段落，尝试从原始文本中提取
-      if (paragraphs.length === 0) {
-        const plainText = $.text().trim();
-        // 移除 Medium 特有的后缀
-        const cleanText = plainText.replace(/Continue reading.*$/, '');
-        paragraphs = cleanText
-          .split(/\n+/)
-          .map(p => p.trim())
-          .filter(p => p.length > 0 && !p.includes('Continue reading'));
-      }
-
-      console.log(`Medium 文章段落数: ${paragraphs.length}`);
-      return paragraphs.join('\n\n');
-    } catch (error) {
-      console.error('处理 Medium 内容失败:', error);
       return null;
     }
   }
@@ -440,6 +400,73 @@ class CrawlerService {
     } catch (error) {
       console.error('翻译失败');
       throw error;
+    }
+  }
+
+  async fetchArxivContent(arxivId) {
+    try {
+      // 使用 arXiv API 获取论文信息
+      const response = await fetch(`http://export.arxiv.org/api/query?id_list=${arxivId}`);
+      const xml = await response.text();
+      const $ = cheerio.load(xml, { xmlMode: true });
+      
+      const title = $('entry > title').text();
+      const abstract = $('entry > summary').text();
+      const authors = $('entry > author > name').map((i, el) => $(el).text()).get().join(', ');
+      
+      return {
+        title,
+        content: `Authors: ${authors}\n\n${abstract}`,
+        link: `https://arxiv.org/abs/${arxivId}`
+      };
+    } catch (error) {
+      console.error('获取 arXiv 内容失败:', error);
+      return null;
+    }
+  }
+
+  async processArxivArticle(item) {
+    try {
+      const arxivId = item.link.match(/abs\/([\d.]+)/)?.[1];
+      if (!arxivId) {
+        console.log('无法获取 arXiv ID');
+        return null;
+      }
+
+      console.log('处理 arXiv 文章:', arxivId);
+      const htmlUrl = `https://arxiv.org/html/${arxivId}`;
+      const response = await fetch(htmlUrl);
+      const html = await response.text();
+      const $ = cheerio.load(html);
+
+      // 提取作者信息
+      const authors = $('.authors').text().trim();
+      
+      // 提取摘要
+      const abstract = $('.abstract').text().trim();
+      
+      // 提取正文（按章节处理）
+      const sections = [];
+      $('.ltx_section').each((i, section) => {
+        const title = $(section).find('.ltx_title').first().text().trim();
+        const content = $(section).find('p').map((i, p) => $(p).text().trim()).get().join('\n\n');
+        if (title && content) {
+          sections.push(`## ${title}\n\n${content}`);
+        }
+      });
+
+      // 组合所有内容
+      const fullContent = [
+        `作者: ${authors}`,
+        `\n摘要:\n${abstract}`,
+        ...sections
+      ].join('\n\n');
+
+      console.log('arXiv 文章处理完成，内容长度:', fullContent.length);
+      return fullContent;
+    } catch (error) {
+      console.error('处理 arXiv 文章失败:', error.message);
+      return null;
     }
   }
 }
