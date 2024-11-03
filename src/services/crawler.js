@@ -291,21 +291,37 @@ class CrawlerService {
         return null;
       }
 
+      // 处理发布日期
+      let publishDate;
+      if (item.pubDate) {
+        publishDate = new Date(item.pubDate);
+      } else if (item.isoDate) {
+        publishDate = new Date(item.isoDate);
+      } else {
+        // 从 arXiv ID 提取日期
+        const arxivId = item.link.match(/\d{4}\.\d{5}/)?.[0];
+        if (arxivId) {
+          const year = '20' + arxivId.substring(0, 2);
+          const month = arxivId.substring(2, 4);
+          publishDate = new Date(year, month - 1);
+        } else {
+          publishDate = new Date();  // 如果无法提取日期，使用当前时间
+        }
+      }
+
+      console.log('发布日期:', publishDate);
+
       // 获取并清理内容
       const rawContent = item.content || item.contentSnippet || item.description || '';
-      
-      // 清理内容（移除作者和摘要）
       const cleanContent = this.cleanHtmlContent(rawContent);
-      
-      // 生成摘要
-      const summary = this.generateSummary(cleanContent);  // 使用清理后的内容生成摘要
+      const summary = this.generateSummary(cleanContent);
 
       return {
         title: item.title.trim(),
-        content: cleanContent,        // 保存清理后的内容
-        summary: summary,             // 保存生成的摘要
+        content: cleanContent,
+        summary: summary,
         link: item.link,
-        publishDate: item.pubDate || item.isoDate || new Date(),
+        publishDate: publishDate,  // 使用处理后的日期
         source: source.name
       };
     } catch (error) {
