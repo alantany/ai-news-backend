@@ -214,7 +214,7 @@ class CrawlerService {
       for (const source of this.rssSources) {
         if (source.name !== 'arXiv RAG Papers') {
           try {
-            console.log(`\n抓取源: ${source.name}`);
+            console.log(`\n抓��源: ${source.name}`);
             const feed = await this.parser.parseURL(source.url);
             
             for (const item of feed.items) {
@@ -451,48 +451,56 @@ class CrawlerService {
 
   async processArxivArticle(item) {
     try {
-      // 打印原始数据以便调试
       console.log('arXiv 原始数据:', {
         title: item.title,
         link: item.link,
         id: item.id
       });
 
-      // 从 link 中提取 arXiv ID
+      // 从 link 中提取 arXiv ID，支持多种格式
       let arxivId;
-      if (item.link) {
-        arxivId = item.link.match(/\d+\.\d+/)?.[0];
-      }
-      
-      if (!arxivId && item.id) {
-        arxivId = item.id.match(/\d+\.\d+/)?.[0];
+      const patterns = [
+        /arxiv\.org\/abs\/([\d.]+)/,    // 标准格式
+        /arxiv\.org\/pdf\/([\d.]+)/,     // PDF 链接
+        /\/(\d{4}\.\d{5})(?:v\d+)?$/,    // 纯数字格式
+        /(\d{4}\.\d{5})(?:v\d+)?/        // 任何位置的 arXiv ID
+      ];
+
+      for (const pattern of patterns) {
+        const match = (item.link || '').match(pattern);
+        if (match) {
+          arxivId = match[1];
+          break;
+        }
       }
 
       if (!arxivId) {
-        console.log('无法获取 arXiv ID，尝试其他方式');
-        // 如果是完整的 arXiv URL，尝试从中提取
-        const urlMatch = (item.link || item.id || '').match(/arxiv\.org\/[a-z]+\/([\d.]+)/);
-        arxivId = urlMatch?.[1];
-      }
-
-      if (!arxivId) {
-        console.error('无法获取 arXiv ID，原始数据:', item);
+        console.error('无法获取 arXiv ID，原始链接:', item.link);
         return null;
       }
 
       console.log('获取到 arXiv ID:', arxivId);
       const htmlUrl = `https://arxiv.org/html/${arxivId}`;
+      console.log('获取 HTML 版本:', htmlUrl);
+
       const response = await fetch(htmlUrl);
+      if (!response.ok) {
+        console.error('获取 HTML 失败:', response.status);
+        return null;
+      }
+
       const html = await response.text();
       const $ = cheerio.load(html);
 
       // 提取作者信息
       const authors = $('.authors').text().trim();
+      console.log('作者:', authors);
       
       // 提取摘要
       const abstract = $('.abstract').text()
-        .replace('Abstract:', '')  // 移除 "Abstract:" 前缀
+        .replace('Abstract:', '')
         .trim();
+      console.log('摘要长度:', abstract.length);
       
       // 提取正文并处理章节标题
       const sections = [];
@@ -500,19 +508,19 @@ class CrawlerService {
         const title = $(section).find('.ltx_title').first().text().trim();
         const content = $(section).find('p').map((i, p) => $(p).text().trim()).get().join('\n\n');
         if (title && content) {
-          // 使用特殊标记来标识标题，以便在小程序中设置样式
           sections.push(`<title>${title}</title>\n\n${content}`);
         }
       });
+      console.log('提取到的章节数:', sections.length);
 
-      // 组合所有内容，使用特殊标记区分不同部分
+      // 组合所有内容
       const fullContent = [
         `<authors>${authors}</authors>`,
         `\n<abstract>摘要：\n${abstract}</abstract>`,
         ...sections
       ].join('\n\n');
 
-      console.log('arXiv 文章处理完成，内容长度:', fullContent.length);
+      console.log('处理完成，总内容长度:', fullContent.length);
       return fullContent;
     } catch (error) {
       console.error('处理 arXiv 文章失败:', error.message);
