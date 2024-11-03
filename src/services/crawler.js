@@ -254,7 +254,7 @@ class CrawlerService {
       console.log(`\n本次保存: ${savedArticles.length} 篇`);
       return savedArticles;
     } catch (error) {
-      console.error('抓取过程失败:', error);
+      console.error('���取过程失败:', error);
       throw error;
     }
   }
@@ -263,8 +263,18 @@ class CrawlerService {
     try {
       console.log('处理文章:', item.title);
 
-      if (!item.title || !item.link) {
-        console.log('文章缺少标题或链接，跳过');
+      if (!item.title) {
+        console.log('文章缺少标题，跳过');
+        return null;
+      }
+
+      // 处理链接
+      let url = item.link;
+      if (!url && item.id) {
+        url = item.id;  // 使用 id 作为备选
+      }
+      if (!url) {
+        console.log('文章缺少链接，跳过');
         return null;
       }
 
@@ -276,29 +286,36 @@ class CrawlerService {
         publishDate = new Date(item.isoDate);
       } else {
         // 从 arXiv ID 提取日期
-        const arxivId = item.link.match(/\d{4}\.\d{5}/)?.[0];
+        const arxivId = url.match(/\d{4}\.\d{5}/)?.[0];
         if (arxivId) {
           const year = '20' + arxivId.substring(0, 2);
           const month = arxivId.substring(2, 4);
           publishDate = new Date(year, month - 1);
         } else {
-          publishDate = new Date();  // 如果无法提取日期，使用当前时间
+          publishDate = new Date();
         }
       }
-
-      console.log('发布日期:', publishDate);
 
       // 获取并清理内容
       const rawContent = item.content || item.contentSnippet || item.description || '';
       const cleanContent = this.cleanHtmlContent(rawContent);
       const summary = this.generateSummary(cleanContent);
 
+      // 打印调试信息
+      console.log('处理结果:', {
+        hasTitle: !!item.title,
+        hasUrl: !!url,
+        hasContent: !!cleanContent,
+        hasSummary: !!summary,
+        publishDate: publishDate
+      });
+
       return {
         title: item.title.trim(),
         content: cleanContent,
         summary: summary,
-        link: item.link,
-        publishDate: publishDate,  // 使用处理后的日期
+        url: url,  // 确保 url 不为 null
+        publishDate: publishDate,
         source: source.name
       };
     } catch (error) {
