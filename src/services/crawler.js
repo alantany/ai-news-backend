@@ -6,6 +6,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const Setting = require('../models/Setting');
 const { translate } = require('@vitalets/google-translate-api');
+const md5 = require('md5');
 
 class CrawlerService {
   constructor() {
@@ -24,6 +25,10 @@ class CrawlerService {
     });
 
     this.initializeCategories();
+
+    // 百度翻译配置
+    this.BAIDU_APP_ID = '20241103002193055';
+    this.BAIDU_SECRET = 'SHHg4TWXNo_HXA2jfso3';
   }
 
   initializeCategories() {
@@ -427,7 +432,7 @@ class CrawlerService {
 
       if (!content) {
         console.log('无法获取文章内容');
-        // 如果实���获取不到，使用 RSS 中的描述
+        // 如果实获取不到，使用 RSS 中的描述
         content = item.content || item.description || '';
       }
 
@@ -549,11 +554,52 @@ class CrawlerService {
     if (!text) return '';
     
     try {
-      const { text: translatedText } = await translate(text, { to: 'zh-CN' });
-      return translatedText;
+      // 首先尝试使用百度翻译
+      const baiduResult = await this.baiduTranslate(text);
+      if (baiduResult) {
+        return baiduResult;
+      }
+
+      // 如果百度翻译失败，使用 Google 翻译作为备选
+      console.log('百度翻译失败，使用 Google 翻译');
+      const { text: googleResult } = await translate(text, { to: 'zh-CN' });
+      return googleResult;
     } catch (error) {
-      console.error('翻译失败');
+      console.error('翻译失败:', error.message);
       throw error;
+    }
+  }
+
+  async baiduTranslate(text) {
+    try {
+      const salt = Date.now();
+      const sign = md5(this.BAIDU_APP_ID + text + salt + this.BAIDU_SECRET);
+      
+      const response = await fetch('https://fanyi-api.baidu.com/api/trans/vip/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          q: text,
+          from: 'en',
+          to: 'zh',
+          appid: this.BAIDU_APP_ID,
+          salt: salt.toString(),
+          sign: sign
+        })
+      });
+
+      const result = await response.json();
+      
+      if (result.trans_result) {
+        return result.trans_result.map(item => item.dst).join('\n');
+      }
+      
+      throw new Error(result.error_msg || '百度翻译失败');
+    } catch (error) {
+      console.error('百度翻译失败:', error.message);
+      return null;  // 返回 null 以便切换到 Google 翻译
     }
   }
 }
