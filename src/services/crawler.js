@@ -451,14 +451,36 @@ class CrawlerService {
 
   async processArxivArticle(item) {
     try {
-      const arxivId = item.id.match(/abs\/([\d.]+)/)?.[1] || 
-                     item.link.match(/abs\/([\d.]+)/)?.[1];
+      // 打印原始数据以便调试
+      console.log('arXiv 原始数据:', {
+        title: item.title,
+        link: item.link,
+        id: item.id
+      });
+
+      // 从 link 中提取 arXiv ID
+      let arxivId;
+      if (item.link) {
+        arxivId = item.link.match(/\d+\.\d+/)?.[0];
+      }
+      
+      if (!arxivId && item.id) {
+        arxivId = item.id.match(/\d+\.\d+/)?.[0];
+      }
+
       if (!arxivId) {
-        console.log('无法获取 arXiv ID');
+        console.log('无法获取 arXiv ID，尝试其他方式');
+        // 如果是完整的 arXiv URL，尝试从中提取
+        const urlMatch = (item.link || item.id || '').match(/arxiv\.org\/[a-z]+\/([\d.]+)/);
+        arxivId = urlMatch?.[1];
+      }
+
+      if (!arxivId) {
+        console.error('无法获取 arXiv ID，原始数据:', item);
         return null;
       }
 
-      console.log('处理 arXiv 文章:', arxivId);
+      console.log('获取到 arXiv ID:', arxivId);
       const htmlUrl = `https://arxiv.org/html/${arxivId}`;
       const response = await fetch(htmlUrl);
       const html = await response.text();
