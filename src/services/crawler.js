@@ -252,7 +252,7 @@ class CrawlerService {
         }
       }
 
-      console.log(`\n本次存: ${savedArticles.length} 篇`);
+      console.log(`\n本次��: ${savedArticles.length} 篇`);
       return savedArticles;
     } catch (error) {
       console.error('抓取失败:', error);
@@ -268,34 +268,40 @@ class CrawlerService {
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
+      // 截断内容以适应token限制
+      const maxContentLength = 2000;  // 根据实际情况调整
+      const truncatedContent = content.length > maxContentLength 
+        ? content.substring(0, maxContentLength) + '...'
+        : content;
+
       console.log('开始处理文章:', title);
+      console.log('内容长度:', content.length, '截断后长度:', truncatedContent.length);
       
       const requestBody = {
         model: "moonshot-v1-8k",
         messages: [
           {
             role: "system",
-            content: "你是一个专业的翻译助手，请将英文文章翻译成中文，保持段落格式，并生成摘要。"
+            content: "你是一个专业的翻译助手。请将英文文章翻译成中文，保持段落格式。请确保输出格式正确。"
           },
           {
             role: "user",
-            content: `请翻译以下文章并按格式返回：
+            content: `请翻译以下文章，并按格式返回：
 
-原文标题：${title}
+标题：${title}
 
-原文内容：${content}
+内容：${truncatedContent}
 
-请按照以下格式返回结果：
+请严格按照以下格式返回（注意不要添加任何额外内容）：
 <title>中文标题</title>
-<content>中文正文（保持段落格式）</content>
-<summary>200字以内的中文摘要</summary>`
+<content>中文正文</content>
+<summary>中文摘要（200字以内）</summary>`
           }
         ],
         temperature: 0.1,
-        stream: false
+        stream: false,
+        max_tokens: 2000  // 限制输出长度
       };
-
-      console.log('发送请求:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(this.KIMI_API_URL, {
         method: 'POST',
@@ -308,7 +314,6 @@ class CrawlerService {
 
       const responseText = await response.text();
       console.log('Kimi 响应状态:', response.status);
-      console.log('Kimi 响应内容:', responseText);
 
       if (response.status === 429) {
         console.log('请求过于频繁，等待后重试');
@@ -316,30 +321,20 @@ class CrawlerService {
         return this.processWithKimi(title, content, retries - 1);
       }
 
-      if (response.status === 400) {
-        console.error('请求格式错误，请求体:', requestBody);
-        throw new Error('API 请求格式错误');
-      }
-
       if (!response.ok) {
         throw new Error(`API 请求失败: ${response.status}`);
       }
 
       const result = JSON.parse(responseText);
-      
-      if (!result.choices || !result.choices[0]) {
-        throw new Error('API 返回格式错误');
-      }
-
       const output = result.choices[0].message.content;
       
-      // 使用新的标记格式解析
-      const titleMatch = output.match(/<title>([\s\S]*?)<\/title>/);
-      const contentMatch = output.match(/<content>([\s\S]*?)<\/content>/);
-      const summaryMatch = output.match(/<summary>([\s\S]*?)<\/summary>/);
+      // 使用更严格的正则表达式
+      const titleMatch = output.match(/<title>([^<]+)<\/title>/);
+      const contentMatch = output.match(/<content>([^<]+)<\/content>/);
+      const summaryMatch = output.match(/<summary>([^<]+)<\/summary>/);
 
       if (!titleMatch || !contentMatch || !summaryMatch) {
-        console.error('解析失败，原始输出:', output);
+        console.error('解析失败，输出格式不正确');
         throw new Error('输出格式解析失败');
       }
 
