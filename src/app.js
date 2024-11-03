@@ -35,30 +35,36 @@ async function translateUntranslatedArticles() {
       $or: [
         { translatedTitle: { $exists: false } },
         { translatedContent: { $exists: false } },
+        { translatedSummary: { $exists: false } },
         { translatedTitle: null },
         { translatedContent: null },
+        { translatedSummary: null },
         { translatedTitle: '' },
-        { translatedContent: '' }
+        { translatedContent: '' },
+        { translatedSummary: '' }
       ]
     });
     
     console.log(`找到 ${untranslatedArticles.length} 篇需要翻译的文章`);
 
-    // 翻译文章
     for (const article of untranslatedArticles) {
       try {
         console.log(`开始翻译文章: ${article.title}`);
         
-        // 翻译标题和内容
-        const [titleResult, contentResult] = await Promise.all([
+        // 生成摘要
+        const summary = article.summary || article.content.substring(0, 200) + '...';
+        
+        // 翻译标题、内容和摘要
+        const [titleResult, contentResult, summaryResult] = await Promise.all([
           translate(article.title, { to: 'zh-CN' }),
-          translate(article.content, { to: 'zh-CN' })
+          translate(article.content, { to: 'zh-CN' }),
+          translate(summary, { to: 'zh-CN' })
         ]);
 
         console.log('翻译结果:', {
           originalTitle: article.title,
           translatedTitle: titleResult.text,
-          hasTranslatedContent: !!contentResult.text
+          hasSummary: !!summaryResult.text
         });
 
         // 更新文章
@@ -68,8 +74,8 @@ async function translateUntranslatedArticles() {
             $set: {
               translatedTitle: titleResult.text,
               translatedContent: contentResult.text,
-              translatedSummary: generateSummary(contentResult.text),
-              summary: generateSummary(article.content),
+              summary: summary,
+              translatedSummary: summaryResult.text,
               isTranslated: true
             }
           },
@@ -79,7 +85,7 @@ async function translateUntranslatedArticles() {
         console.log('文章更新成功:', {
           id: updatedArticle._id,
           hasTranslatedTitle: !!updatedArticle.translatedTitle,
-          hasTranslatedContent: !!updatedArticle.translatedContent
+          hasTranslatedSummary: !!updatedArticle.translatedSummary
         });
 
         // 添加延迟避免请求过快
@@ -94,7 +100,8 @@ async function translateUntranslatedArticles() {
     const verifyArticles = await Article.find({
       isTranslated: true,
       translatedTitle: { $exists: true, $ne: null, $ne: '' },
-      translatedContent: { $exists: true, $ne: null, $ne: '' }
+      translatedContent: { $exists: true, $ne: null, $ne: '' },
+      translatedSummary: { $exists: true, $ne: null, $ne: '' }
     });
     console.log('翻译统计:', {
       totalArticles: await Article.countDocuments(),
