@@ -29,6 +29,10 @@ class CrawlerService {
     // 百度翻译配置
     this.BAIDU_APP_ID = '20241103002193055';
     this.BAIDU_SECRET = 'SHHg4TWXNo_HXA2jfso3';
+
+    // 添加 Kimi API 配置
+    this.KIMI_API_KEY = 'sk-A1EGCQmO3fmcZVllvqXnmeUpTQ3WIO9RdXS85rcxgKQm0cRP';
+    this.KIMI_API_URL = 'https://api.moonshot.cn/v1/chat/completions';
   }
 
   initializeCategories() {
@@ -248,7 +252,7 @@ class CrawlerService {
         }
       }
 
-      console.log(`\n本次保存: ${savedArticles.length} 篇`);
+      console.log(`\n本次��存: ${savedArticles.length} 篇`);
       return savedArticles;
     } catch (error) {
       console.error('抓取失败:', error);
@@ -256,16 +260,83 @@ class CrawlerService {
     }
   }
 
+  async processWithKimi(title, content) {
+    try {
+      console.log('开始处理文章:', title);
+      
+      const response = await fetch(this.KIMI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.KIMI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: 'moonshot-v1-8k',
+          messages: [
+            {
+              role: 'system',
+              content: `你是一个专业的文档处理助手。请帮我完成以下任务：
+1. 将英文文章翻译成中文
+2. 保持适当的段落分隔（使用两个换行符）
+3. 确保专业术语的准确性
+4. 保持文章的逻辑结构
+5. 返回格式如下：
+[标题]
+中文标题
+[/标题]
+[内容]
+中文内容（分段格式）
+[/内容]
+[摘要]
+中文摘要（200字以内）
+[/摘要]`
+            },
+            {
+              role: 'user',
+              content: `标题：${title}\n\n正文：${content}`
+            }
+          ],
+          temperature: 0.1
+        })
+      });
+
+      const result = await response.json();
+      console.log('Kimi 响应状态:', response.status);
+      
+      if (!result.choices || !result.choices[0]) {
+        throw new Error('Kimi API 返回格式错误');
+      }
+
+      const output = result.choices[0].message.content;
+      
+      // 解析返回的内容
+      const titleMatch = output.match(/\[标题\]([\s\S]*?)\[\/标题\]/);
+      const contentMatch = output.match(/\[内容\]([\s\S]*?)\[\/内容\]/);
+      const summaryMatch = output.match(/\[摘要\]([\s\S]*?)\[\/摘要\]/);
+
+      if (!titleMatch || !contentMatch || !summaryMatch) {
+        throw new Error('输出格式解析失败');
+      }
+
+      return {
+        translatedTitle: titleMatch[1].trim(),
+        translatedContent: contentMatch[1].trim(),
+        translatedSummary: summaryMatch[1].trim()
+      };
+    } catch (error) {
+      console.error('Kimi 处理失败:', error.message);
+      throw error;
+    }
+  }
+
   async processRssItem(item, source) {
     try {
-      console.log('处理文章:', item.title);
-
       if (!item.title || !item.link) {
         console.log('文章缺少标题或链接，跳过');
         return null;
       }
 
-      // 根据不同源取内容
+      // 获取原始内容
       let content = '';
       switch (source.name) {
         case 'Microsoft AI Blog':
@@ -278,20 +349,24 @@ class CrawlerService {
           content = item.content || item.contentSnippet || item.description || '';
       }
 
-      // 清理和格式化内容
-      const cleanContent = this.cleanHtmlContent(content);
-      
-      if (!cleanContent) {
-        console.log('清理后的内容为空，跳过');
+      if (!content) {
+        console.log('获取内容失败');
         return null;
       }
 
+      // 使用 Kimi 处理内容
+      const processed = await this.processWithKimi(item.title, content);
+      
       return {
         title: item.title.trim(),
-        content: cleanContent,
+        content: content,
+        translatedTitle: processed.translatedTitle,
+        translatedContent: processed.translatedContent,
+        translatedSummary: processed.translatedSummary,
         link: item.link,
         pubDate: item.pubDate || item.isoDate || new Date(),
-        source: source.name
+        source: source.name,
+        isTranslated: true
       };
     } catch (error) {
       console.error('处理文章失败:', error);
@@ -335,72 +410,6 @@ class CrawlerService {
       console.error('获取 Medium 文章内容失败');
       return '';
     }
-  }
-
-  cleanHtmlContent(content) {
-    if (!content) return '';
-    
-    try {
-      const $ = cheerio.load(content);
-      
-      // 移除不需要的元素
-      $('script, style, iframe, nav, header, footer').remove();
-      
-      let paragraphs = [];
-      
-      // 处理段落
-      $('p, div').each((i, elem) => {
-        const text = $(elem).text().trim();
-        if (text) {
-          paragraphs.push(text);
-        }
-      });
-
-      // 如果没有找到段落标签，尝试按照换行符分割
-      if (paragraphs.length === 0) {
-        const plainText = $.text().trim();
-        paragraphs = plainText
-          .split(/\n+/)  // 按一个或多个换行符分割
-          .map(p => p.trim())
-          .filter(p => p.length > 0);
-      }
-
-      // 如果还是没有段落，尝试按照句号分割
-      if (paragraphs.length === 0) {
-        const plainText = $.text().trim();
-        paragraphs = plainText
-          .split(/[.。!！?？]\s+/)  // 按标点符号分割
-          .map(p => p.trim() + '。')  // 添加句号
-          .filter(p => p.length > 0);
-      }
-
-      // 合并段落，使用双换行符
-      let formattedText = paragraphs.join('\n\n');
-
-      // 清理格式
-      formattedText = formattedText
-        .replace(/\s+/g, ' ')         // 合并空格
-        .replace(/ +/g, ' ')          // 多个空格变成一个
-        .replace(/\n\s+/g, '\n\n')    // 清理段落之间的空白
-        .replace(/\n{3,}/g, '\n\n')   // 多个换行变成两个
-        .trim();
-
-      console.log('段落数量:', paragraphs.length);
-      return formattedText;
-    } catch (error) {
-      console.error('清理内容失败');
-      return content;
-    }
-  }
-
-  formatContent($) {
-    // 移除所有内容相关的日志
-    return $.text().trim();
-  }
-
-  generateSummary(content) {
-    // 简单地截取前200个字符作为摘要
-    return content.substring(0, 200) + '...';
   }
 
   async translateText(text) {
