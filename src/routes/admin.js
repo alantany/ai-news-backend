@@ -84,7 +84,7 @@ router.post('/crawl', async (req, res) => {
     });
   } catch (error) {
     console.error('手动抓取错误:', error);
-    // 确保错误响应也设置正确的头
+    // 确保错误响应也设置正确��头
     res.setHeader('Connection', 'close');
     res.status(500).json({ message: error.message });
   } finally {

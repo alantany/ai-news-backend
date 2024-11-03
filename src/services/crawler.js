@@ -260,48 +260,75 @@ class CrawlerService {
     }
   }
 
-  async processWithKimi(title, content) {
+  async processWithKimi(title, content, retries = 3) {
+    if (retries <= 0) {
+      throw new Error('超过最大重试次数');
+    }
+
     try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       console.log('开始处理文章:', title);
       
+      const requestBody = {
+        model: "moonshot-v1-8k",
+        messages: [
+          {
+            role: "system",
+            content: "你是一个专业的翻译助手，请将英文文章翻译成中文，保持段落格式，并生成摘要。"
+          },
+          {
+            role: "user",
+            content: `请翻译以下文章并按格式返回：
+
+原文标题：${title}
+
+原文内容：${content}
+
+请按照以下格式返回结果：
+<title>中文标题</title>
+<content>中文正文（保持段落格式）</content>
+<summary>200字以内的中文摘要</summary>`
+          }
+        ],
+        temperature: 0.1,
+        stream: false
+      };
+
+      console.log('发送请求:', JSON.stringify(requestBody, null, 2));
+
       const response = await fetch(this.KIMI_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.KIMI_API_KEY}`
         },
-        body: JSON.stringify({
-          model: 'moonshot-v1-8k',
-          messages: [
-            {
-              role: 'system',
-              content: '你是一个专业的翻译和排版助手。请将英文文章翻译成中文，并保持适当的段落分隔。'
-            },
-            {
-              role: 'user',
-              content: `请按照以下格式处理这篇文章：
-1. 翻译标题和正文
-2. 生成200字以内的中文摘要
-3. 使用 <title>标题</title> <content>正文</content> <summary>摘要</summary> 标记返回结果
-
-原文标题：${title}
-
-原文内容：${content}`
-            }
-          ],
-          temperature: 0.1,
-          max_tokens: 4000
-        })
+        body: JSON.stringify(requestBody)
       });
 
-      const result = await response.json();
+      const responseText = await response.text();
       console.log('Kimi 响应状态:', response.status);
-      
-      // 打印完整响应用于调试
-      console.log('Kimi 响应内容:', result.choices[0].message.content);
+      console.log('Kimi 响应内容:', responseText);
 
+      if (response.status === 429) {
+        console.log('请求过于频繁，等待后重试');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        return this.processWithKimi(title, content, retries - 1);
+      }
+
+      if (response.status === 400) {
+        console.error('请求格式错误，请求体:', requestBody);
+        throw new Error('API 请求格式错误');
+      }
+
+      if (!response.ok) {
+        throw new Error(`API 请求失败: ${response.status}`);
+      }
+
+      const result = JSON.parse(responseText);
+      
       if (!result.choices || !result.choices[0]) {
-        throw new Error('Kimi API 返回格式错误');
+        throw new Error('API 返回格式错误');
       }
 
       const output = result.choices[0].message.content;
@@ -323,6 +350,13 @@ class CrawlerService {
       };
     } catch (error) {
       console.error('Kimi 处理失败:', error.message);
+      
+      if (retries > 1) {
+        console.log(`等待后重试，剩余次数: ${retries - 1}`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        return this.processWithKimi(title, content, retries - 1);
+      }
+      
       throw error;
     }
   }
