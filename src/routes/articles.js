@@ -41,13 +41,12 @@ router.get('/', async (req, res) => {
     console.log('获取文章列表请求');
     const articles = await Article.find({})
       .sort({ publishDate: -1 })
-      .select('_id title translatedTitle source url publishDate summary translatedSummary isTranslated');
+      .select('title translatedTitle source publishDate summary translatedSummary');
     
-    console.log('返回文章数量:', articles.length);
-    console.log('第一篇文章数据:', {
+    console.log('返回文章示例:', {
       title: articles[0]?.title,
-      translatedTitle: articles[0]?.translatedTitle,
-      hasTranslatedTitle: !!articles[0]?.translatedTitle
+      hasSummary: !!articles[0]?.translatedSummary,
+      summaryLength: articles[0]?.translatedSummary?.length || 0
     });
     
     res.json(articles);
