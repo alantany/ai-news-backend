@@ -214,7 +214,7 @@ class CrawlerService {
       }, {});
       console.log('\n文章分类统计:', categories);
 
-      // 保存文章
+      // 保存文章时不进行翻译
       const savedArticles = [];
       for (const article of selectedArticles) {
         try {
@@ -224,26 +224,14 @@ class CrawlerService {
             continue;
           }
 
-          console.log('\n翻译处理中...');
-          const combinedText = `[TITLE]${article.title}[/TITLE]\n\n${article.content}`;
-          const translatedText = await this.translateText(combinedText);
-          
-          const titleMatch = translatedText.match(/\[TITLE\](.*?)\[\/TITLE\]/);
-          const translatedTitle = titleMatch ? titleMatch[1].trim() : article.title;
-          const translatedContent = translatedText
-            .replace(/\[TITLE\].*?\[\/TITLE\]\s*/, '')
-            .trim();
-          
-          const translatedSummary = this.generateSummary(translatedContent);
-
           const savedArticle = await Article.create({
-            title: translatedTitle,
-            content: translatedContent,
-            summary: translatedSummary,
+            title: article.title,
+            content: article.content,
             source: article.source,
             url: article.link,
             publishDate: new Date(article.pubDate),
-            category: article.category
+            category: article.category,
+            isTranslated: false
           });
 
           console.log('保存成功');

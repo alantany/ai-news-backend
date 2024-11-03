@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Article = require('../models/Article');
 const fetch = require('node-fetch');
+const { translate } = require('@vitalets/google-translate-api');
 
 // 获取文章总数
 router.get('/count', async (req, res) => {
@@ -187,6 +188,56 @@ router.get('/proxy/:id', async (req, res) => {
         </body>
       </html>
     `);
+  }
+});
+
+// 获取或创建文章翻译
+router.post('/:id/translate', async (req, res) => {
+  try {
+    const article = await Article.findById(req.params.id);
+    if (!article) {
+      return res.status(404).json({ message: '文章不存在' });
+    }
+
+    // 如果已经翻译过，直接返回
+    if (article.isTranslated) {
+      return res.json({
+        title: article.translatedTitle,
+        content: article.translatedContent,
+        summary: article.translatedSummary
+      });
+    }
+
+    // 进行翻译
+    try {
+      const [titleResult, contentResult] = await Promise.all([
+        translate(article.title, { to: 'zh-CN' }),
+        translate(article.content, { to: 'zh-CN' })
+      ]);
+
+      // 生成摘要并翻译
+      const summary = article.content.substring(0, 200) + '...';
+      const summaryResult = await translate(summary, { to: 'zh-CN' });
+
+      // 更新文章
+      article.translatedTitle = titleResult.text;
+      article.translatedContent = contentResult.text;
+      article.translatedSummary = summaryResult.text;
+      article.isTranslated = true;
+      await article.save();
+
+      res.json({
+        title: article.translatedTitle,
+        content: article.translatedContent,
+        summary: article.translatedSummary
+      });
+    } catch (error) {
+      console.error('翻译失败:', error);
+      res.status(500).json({ message: '翻译失败' });
+    }
+  } catch (error) {
+    console.error('处理翻译请求失败:', error);
+    res.status(500).json({ message: error.message });
   }
 });
 
