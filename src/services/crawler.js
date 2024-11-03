@@ -265,36 +265,76 @@ class CrawlerService {
         return null;
       }
 
-      // 根据不同源取内容
+      // 根据不同源获取和处理内容
       let content = '';
       switch (source.name) {
-        case 'Microsoft AI Blog':
-          content = await this.fetchMicrosoftContent(item.link);
-          break;
         case 'Towards Data Science':
-          content = await this.fetchMediumContent(item.link);
+          content = await this.processMediumContent(item);
           break;
         default:
           content = item.content || item.contentSnippet || item.description || '';
+          content = this.cleanHtmlContent(content);
       }
 
-      // 清理和格式化内容
-      const cleanContent = this.cleanHtmlContent(content);
-      
-      if (!cleanContent) {
-        console.log('清理后的内容为空，跳过');
+      if (!content) {
+        console.log('内容为空，跳过');
         return null;
       }
 
       return {
         title: item.title.trim(),
-        content: cleanContent,
+        content: content,
         link: item.link,
         pubDate: item.pubDate || item.isoDate || new Date(),
         source: source.name
       };
     } catch (error) {
       console.error('处理文章失败:', error);
+      return null;
+    }
+  }
+
+  async processMediumContent(item) {
+    try {
+      // 获取原始内容
+      let content = item.content || item.contentSnippet || item.description || '';
+      
+      // 使用 cheerio 解析 HTML
+      const $ = cheerio.load(content);
+      
+      let paragraphs = [];
+      
+      // 处理 Medium 特有的格式
+      $('.medium-feed-snippet').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text) {
+          paragraphs.push(text);
+        }
+      });
+      
+      // 处理其他可能的段落
+      $('p').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text && !text.includes('Continue reading on')) {
+          paragraphs.push(text);
+        }
+      });
+
+      // 如果没有找到段落，尝试从原始文本中提取
+      if (paragraphs.length === 0) {
+        const plainText = $.text().trim();
+        // 移除 Medium 特有的后缀
+        const cleanText = plainText.replace(/Continue reading.*$/, '');
+        paragraphs = cleanText
+          .split(/\n+/)
+          .map(p => p.trim())
+          .filter(p => p.length > 0 && !p.includes('Continue reading'));
+      }
+
+      console.log(`Medium 文章段落数: ${paragraphs.length}`);
+      return paragraphs.join('\n\n');
+    } catch (error) {
+      console.error('处理 Medium 内容失败:', error);
       return null;
     }
   }
