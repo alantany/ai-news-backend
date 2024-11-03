@@ -176,79 +176,64 @@ class CrawlerService {
       console.log('\n============= 开始抓取文章 =============');
       
       const settings = await Setting.findOne() || { preArticlesPerSource: 5 };
-      const finalArticleCount = settings.preArticlesPerSource || 5;  // 最终要保存的文章数量
-      console.log(`计划保存文章数量: ${finalArticleCount}`);
+      const articlesPerSource = settings.preArticlesPerSource || 5;
+      console.log(`计划抓取数量: ${articlesPerSource}`);
       
-      // 从所有源获取文章
       let allArticles = [];
       
-      // 遍历所有 RSS 源
       for (const source of this.rssSources) {
         try {
-          console.log(`\n从 ${source.name} 抓取文章`);
+          console.log(`\n抓取源: ${source.name}`);
           const feed = await this.parser.parseURL(source.url);
-          console.log(`获取到 ${feed.items.length} 篇文章`);
           
-          // 处理每篇文章
           for (const item of feed.items) {
-            try {
-              const processedArticle = await this.processRssItem(item, source);
-              if (processedArticle && processedArticle.content) {
-                const scoreResult = this.calculateArticleScore(processedArticle.title, source.name);
-                allArticles.push({
-                  ...processedArticle,
-                  score: scoreResult.score,
-                  category: scoreResult.category
-                });
-              }
-            } catch (error) {
-              console.error('处理文章失败:', error.message);
-              continue;
+            const processedArticle = await this.processRssItem(item, source);
+            if (processedArticle && processedArticle.content) {
+              const scoreResult = this.calculateArticleScore(processedArticle.title, source.name);
+              allArticles.push({
+                ...processedArticle,
+                score: scoreResult.score,
+                category: scoreResult.category
+              });
             }
           }
         } catch (error) {
-          console.error(`抓取 ${source.name} 失败:`, error.message);
+          console.error(`抓取失败: ${source.name}`);
           continue;
         }
       }
 
-      console.log(`\n总共获取到 ${allArticles.length} 篇文章`);
-
       // 按分数排序
       allArticles.sort((a, b) => b.score - a.score);
-
-      // 选择前N篇文章
-      const selectedArticles = allArticles.slice(0, finalArticleCount);
+      const selectedArticles = allArticles.slice(0, articlesPerSource);
 
       // 显示分类统计
       const categories = selectedArticles.reduce((acc, article) => {
         acc[article.category] = (acc[article.category] || 0) + 1;
         return acc;
       }, {});
-      console.log('\n选中文章分类统计:', categories);
+      console.log('\n文章分类统计:', categories);
 
-      // 保存选中的文章
+      // 保存文章
       const savedArticles = [];
       for (const article of selectedArticles) {
         try {
           const existingArticle = await Article.findOne({ url: article.link });
           if (existingArticle) {
-            console.log('文章已存在，跳过:', article.title);
+            console.log('已存在，跳过');
             continue;
           }
 
-          // 合并标题和内容一次性翻译
+          console.log('\n翻译处理中...');
           const combinedText = `[TITLE]${article.title}[/TITLE]\n\n${article.content}`;
           const translatedText = await this.translateText(combinedText);
           
-          // 提取翻译后的标题和内容
           const titleMatch = translatedText.match(/\[TITLE\](.*?)\[\/TITLE\]/);
           const translatedTitle = titleMatch ? titleMatch[1].trim() : article.title;
           const translatedContent = translatedText
             .replace(/\[TITLE\].*?\[\/TITLE\]\s*/, '')
             .trim();
           
-          // 生成摘要
           const translatedSummary = this.generateSummary(translatedContent);
 
           const savedArticle = await Article.create({
@@ -261,18 +246,18 @@ class CrawlerService {
             category: article.category
           });
 
-          console.log('保存成功:', translatedTitle);
+          console.log('保存成功');
           savedArticles.push(savedArticle);
         } catch (error) {
-          console.error('保存文章失败:', error.message);
+          console.error('保存失败');
           continue;
         }
       }
 
-      console.log(`\n本次共保存 ${savedArticles.length} 篇文章`);
+      console.log(`\n本次保存: ${savedArticles.length} 篇`);
       return savedArticles;
     } catch (error) {
-      console.error('抓取过程发生错误:', error);
+      console.error('抓取失败:', error.message);
       throw error;
     }
   }
