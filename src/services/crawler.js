@@ -275,53 +275,58 @@ class CrawlerService {
         return null;
       }
 
-      // 处理链接
-      let url = item.link;
-      if (!url && item.id) {
-        url = item.id;  // 使用 id 作为备选
-      }
-      if (!url) {
-        console.log('文章缺少链接，跳过');
+      // 获取 arXiv ID
+      const arxivId = item.link.match(/\d{4}\.\d{5}/)?.[0];
+      if (!arxivId) {
+        console.log('无法获取 arXiv ID');
         return null;
       }
 
-      // 处理发布日期
-      let publishDate;
-      if (item.pubDate) {
-        publishDate = new Date(item.pubDate);
-      } else if (item.isoDate) {
-        publishDate = new Date(item.isoDate);
-      } else {
-        // 从 arXiv ID 提取日期
-        const arxivId = url.match(/\d{4}\.\d{5}/)?.[0];
-        if (arxivId) {
-          const year = '20' + arxivId.substring(0, 2);
-          const month = arxivId.substring(2, 4);
-          publishDate = new Date(year, month - 1);
-        } else {
-          publishDate = new Date();
-        }
-      }
+      // 获取 HTML 版本的内容
+      console.log('获取文章内容:', arxivId);
+      const htmlUrl = `https://arxiv.org/html/${arxivId}`;
+      const response = await fetch(htmlUrl);
+      const html = await response.text();
+      const $ = cheerio.load(html);
 
-      // 获取并清理内容
-      const rawContent = item.content || item.contentSnippet || item.description || '';
-      const cleanContent = this.cleanHtmlContent(rawContent);
-      const summary = this.generateSummary(cleanContent);
+      // 提取内容
+      let content = '';
+      $('.ltx_section').each((i, section) => {
+        const title = $(section).find('.ltx_title').first().text().trim();
+        const paragraphs = $(section).find('p').map((i, p) => $(p).text().trim()).get();
+        
+        if (title && paragraphs.length > 0) {
+          content += `## ${title}\n\n${paragraphs.join('\n\n')}\n\n`;
+        }
+      });
+
+      // 生成摘要
+      const abstract = $('.abstract').text().trim();
+      const summary = abstract.replace('Abstract:', '').trim();
+
+      // 处理发布日期
+      let publishDate = new Date(item.pubDate || item.isoDate);
+      if (!publishDate || isNaN(publishDate)) {
+        const year = '20' + arxivId.substring(0, 2);
+        const month = arxivId.substring(2, 4);
+        publishDate = new Date(year, month - 1);
+      }
 
       // 打印调试信息
       console.log('处理结果:', {
         hasTitle: !!item.title,
-        hasUrl: !!url,
-        hasContent: !!cleanContent,
+        hasUrl: !!item.link,
+        hasContent: !!content,
+        contentLength: content.length,
         hasSummary: !!summary,
         publishDate: publishDate
       });
 
       return {
         title: item.title.trim(),
-        content: cleanContent,
+        content: content,
         summary: summary,
-        url: url,  // 确保 url 不为 null
+        url: item.link,
         publishDate: publishDate,
         source: source.name
       };
@@ -577,7 +582,7 @@ class CrawlerService {
         ...sections
       ].join('\n\n');
 
-      console.log('处理完成，内容统计:', {
+      console.log('处��完成，内容统计:', {
         hasAuthors: !!authors,
         hasAbstract: !!abstract,
         sectionsCount: sections.length,
