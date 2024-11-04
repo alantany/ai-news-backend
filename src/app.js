@@ -6,6 +6,7 @@ const CrawlerService = require('./services/crawler');
 const Setting = require('./models/Setting');
 const Article = require('./models/Article');
 const { translate } = require('@vitalets/google-translate-api');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -18,6 +19,9 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// 添加静态文件服务
+app.use(express.static(path.join(__dirname, '../public')));
 
 // 生成摘要
 function generateSummary(content, length = 100) {

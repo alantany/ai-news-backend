@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 新闻聚合 - 管理后台</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .control-panel {
+            display: grid;
+            gap: 20px;
+        }
+        .settings {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        input[type="number"] {
+            width: 100px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #07c160;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #06b057;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            background: #e8f5e9;
+            color: #2e7d32;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI 新闻聚合 - 管理后台</h1>
+        
+        <div class="control-panel">
+            <div class="settings">
+                <h2>抓取设置</h2>
+                <div class="form-group">
+                    <label>每个源抓取数量</label>
+                    <input type="number" id="articlesPerSource" min="1" max="100" value="20">
+                </div>
+                <div class="form-group">
+                    <label>抓取间隔（分钟）</label>
+                    <input type="number" id="crawlInterval" min="1" max="1440" value="60">
+                </div>
+                <button onclick="saveSettings()">保存设置</button>
+            </div>
+
+            <div class="actions">
+                <h2>操作</h2>
+                <button onclick="clearArticles()">清空文章</button>
+                <button onclick="crawlArticles()">立即抓取</button>
+            </div>
+        </div>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        const BASE_URL = '/api/admin';
+
+        async function saveSettings() {
+            const articlesPerSource = document.getElementById('articlesPerSource').value;
+            const crawlInterval = document.getElementById('crawlInterval').value;
+            
+            try {
+                const response = await fetch(`${BASE_URL}/settings`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        preArticlesPerSource: parseInt(articlesPerSource),
+                        crawlInterval: parseInt(crawlInterval),
+                        autoCrawl: true
+                    })
+                });
+                
+                if (response.ok) {
+                    showStatus('设置已保存', 'success');
+                } else {
+                    showStatus('保存设置失败', 'error');
+                }
+            } catch (error) {
+                showStatus('保存设置失败: ' + error.message, 'error');
+            }
+        }
+
+        async function clearArticles() {
+            try {
+                const response = await fetch(`${BASE_URL}/clear-articles`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    showStatus('文章已清空', 'success');
+                } else {
+                    showStatus('清空文章失败', 'error');
+                }
+            } catch (error) {
+                showStatus('清空文章失败: ' + error.message, 'error');
+            }
+        }
+
+        async function crawlArticles() {
+            try {
+                const response = await fetch(`${BASE_URL}/crawl`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    showStatus('抓取完成', 'success');
+                } else {
+                    showStatus('抓取失败', 'error');
+                }
+            } catch (error) {
+                showStatus('抓取失败: ' + error.message, 'error');
+            }
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.display = 'block';
+            status.style.background = type === 'success' ? '#e8f5e9' : '#ffebee';
+            status.style.color = type === 'success' ? '#2e7d32' : '#c62828';
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }
+
+        // 加载当前设置
+        async function loadSettings() {
+            try {
+                const response = await fetch(`${BASE_URL}/settings`);
+                if (response.ok) {
+                    const settings = await response.json();
+                    document.getElementById('articlesPerSource').value = settings.preArticlesPerSource || 20;
+                    document.getElementById('crawlInterval').value = settings.crawlInterval || 60;
+                }
+            } catch (error) {
+                console.error('加载设置失败:', error);
+            }
+        }
+
+        // 页面加载时获取当前设置
+        loadSettings();
+    </script>
+</body>
+</html> 
