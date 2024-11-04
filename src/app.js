@@ -45,8 +45,10 @@ async function translateUntranslatedArticles() {
       $or: [
         { translatedTitle: { $exists: false } },
         { translatedContent: { $exists: false } },
+        { translatedSummary: { $exists: false } },
         { translatedTitle: null },
-        { translatedContent: null }
+        { translatedContent: null },
+        { translatedSummary: null }
       ]
     });
     
@@ -56,15 +58,11 @@ async function translateUntranslatedArticles() {
       try {
         console.log(`开始翻译文章: ${article.title}`);
         
-        // 预处理内容，统一标题格式
-        const processedContent = article.content
-          .replace(/^#\s*#\s*#\s*/gm, '### ')  // 统一 # # # 格式为 ###
-          .replace(/^#{3,}\s*/gm, '### ');      // 处理多余的 #
-
-        // 翻译处理后的内容
-        const [titleResult, contentResult] = await Promise.all([
+        // 翻译标题、内容和摘要
+        const [titleResult, contentResult, summaryResult] = await Promise.all([
           translate(article.title, { to: 'zh-CN' }),
-          translate(processedContent, { to: 'zh-CN' })
+          translate(article.content, { to: 'zh-CN' }),
+          translate(article.summary, { to: 'zh-CN' })
         ]);
 
         // 更新文章
@@ -74,6 +72,7 @@ async function translateUntranslatedArticles() {
             $set: {
               translatedTitle: titleResult.text,
               translatedContent: contentResult.text,
+              translatedSummary: summaryResult.text,
               isTranslated: true
             }
           },
@@ -83,7 +82,8 @@ async function translateUntranslatedArticles() {
         console.log('文章更新成功:', {
           id: updatedArticle._id,
           hasTranslatedTitle: !!updatedArticle.translatedTitle,
-          hasTranslatedContent: !!updatedArticle.translatedContent
+          hasTranslatedContent: !!updatedArticle.translatedContent,
+          hasTranslatedSummary: !!updatedArticle.translatedSummary
         });
 
         await new Promise(resolve => setTimeout(resolve, 1000));
