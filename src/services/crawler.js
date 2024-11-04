@@ -208,24 +208,25 @@ class CrawlerService {
       await this.loadRssSources();
       console.log('\n============= 开始抓取文章 =============');
       
-      // 从设置中获取每个源的文章数量
       const settings = await Setting.findOne() || { preArticlesPerSource: 5 };
       const articlesPerSource = settings.preArticlesPerSource;
       console.log(`每个源抓取数量: ${articlesPerSource}`);
       
       let allArticles = [];
       
-      // 遍历所有 RSS 源
       for (const source of this.rssSources) {
         try {
           console.log(`\n抓取源: ${source.name}`);
           const feed = await this.parser.parseURL(source.url);
           
-          // 使用设置中的数量限制
-          const articles = feed.items
-            .slice(0, articlesPerSource)
-            .map(item => this.processRssItem(item, source))
-            .filter(article => article !== null);
+          // 处理每篇文章
+          const articles = [];
+          for (const item of feed.items.slice(0, articlesPerSource)) {
+            const processedArticle = await this.processRssItem(item, source);
+            if (processedArticle) {
+              articles.push(processedArticle);
+            }
+          }
 
           allArticles.push(...articles);
           console.log(`获取到 ${articles.length} 篇文章`);
@@ -241,26 +242,27 @@ class CrawlerService {
       const savedArticles = [];
       for (const article of allArticles) {
         try {
-          // 先检查文章是否已存在
-          const existingArticle = await Article.findOne({ url: article.url });
+          // 使用 title 和 url 组合来判断文章是否存在
+          const existingArticle = await Article.findOne({
+            $or: [
+              { title: article.title },
+              { url: article.url }
+            ]
+          });
+
           if (existingArticle) {
             console.log('文章已存在，跳过:', article.title);
             continue;
           }
 
-          // 保存新文章
           const savedArticle = await Article.create(article);
           console.log('保存成功:', savedArticle.title);
           savedArticles.push(savedArticle);
         } catch (error) {
-          if (error.code === 11000) {  // 重复键错误
-            console.log('文章已存在（并发检查）:', article.title);
-          } else {
-            console.error('保存失败:', {
-              title: article.title,
-              error: error.message
-            });
-          }
+          console.error('保存失败:', {
+            title: article.title,
+            error: error.message
+          });
         }
       }
 
