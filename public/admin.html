@@ -230,16 +230,20 @@
             fetch(`${BASE_URL}/settings`)
                 .then(res => res.json())
                 .then(settings => {
-                    const interval = settings.crawlInterval || 60;
-                    const lastCrawl = new Date(settings.lastCrawl || Date.now());
-                    const nextCrawl = new Date(lastCrawl.getTime() + interval * 60000);
-                    
+                    if (!settings.nextCrawlTime) {
+                        document.getElementById('timer').textContent = '等待首次抓取';
+                        return;
+                    }
+
                     function updateTimer() {
                         const now = new Date();
+                        const nextCrawl = new Date(settings.nextCrawlTime);
                         const diff = nextCrawl - now;
                         
                         if (diff <= 0) {
                             document.getElementById('timer').textContent = '即将开始';
+                            // 重新获取设置
+                            setTimeout(updateCountdown, 5000);
                             return;
                         }
                         
@@ -252,13 +256,22 @@
                     }
                     
                     updateTimer();
-                    setInterval(updateTimer, 1000);
+                    // 每秒更新一次
+                    const timer = setInterval(updateTimer, 1000);
+                    
+                    // 清除旧的定时器
+                    if (window.countdownTimer) {
+                        clearInterval(window.countdownTimer);
+                    }
+                    window.countdownTimer = timer;
                 })
                 .catch(console.error);
         }
 
         // 页面加载时启动倒计时
         updateCountdown();
+        // 每分钟重新获取一次设置
+        setInterval(updateCountdown, 60000);
     </script>
 </body>
 </html> 

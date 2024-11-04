@@ -290,6 +290,19 @@ class CrawlerService {
       console.log('\n保存统计:');
       console.log(`总处理文章数: ${allArticles.length}`);
       console.log(`成功保存文章数: ${savedArticles.length}`);
+
+      // 更新最后抓取时间
+      await Setting.findOneAndUpdate(
+        {},
+        { 
+          $set: { 
+            lastCrawlTime: new Date(),
+            nextCrawlTime: new Date(Date.now() + (settings.crawlInterval || 60) * 60000)
+          } 
+        },
+        { upsert: true }
+      );
+
       return savedArticles;
     } catch (error) {
       console.error('抓取过程失败:', error);
@@ -427,7 +440,7 @@ class CrawlerService {
       const html = await response.text();
       const $ = cheerio.load(html);
       
-      // 提取内容，尝试多个可能的选择器
+      // 提取��容，尝试多个可能的选择器
       let contentParts = [];
       
       // 尝试不同的内容选择器

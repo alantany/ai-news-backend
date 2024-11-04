@@ -1,24 +1,21 @@
 const mongoose = require('mongoose');
 
 const settingSchema = new mongoose.Schema({
-  crawlInterval: {
-    type: Number,
-    default: 60,
-    required: true
-  },
   preArticlesPerSource: {
     type: Number,
-    default: 5,
-    required: true
+    default: 20
+  },
+  crawlInterval: {
+    type: Number,
+    default: 60
   },
   autoCrawl: {
     type: Boolean,
-    default: false,
-    required: true
+    default: true
   },
-  lastCrawlTime: {
-    type: Date
-  }
+  lastCrawlTime: Date,
+  nextCrawlTime: Date,
+  keywords: [String]
 });
 
 module.exports = mongoose.model('Setting', settingSchema); 
