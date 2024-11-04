@@ -36,6 +36,27 @@ function cleanSummary(text) {
     .trim();
 }
 
+// 添加延迟函数
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// 添加重试翻译函数
+async function retryTranslate(text, retries = 3) {
+  if (!text) return { text: '' };
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      // 每次重试前添加延迟
+      if (i > 0) {
+        await delay(2000 * i);  // 递增延迟
+      }
+      return await translate(text, { to: 'zh-CN' });
+    } catch (error) {
+      console.error(`翻译失败 (尝试 ${i + 1}/${retries}):`, error.message);
+      if (i === retries - 1) throw error;  // 最后一次尝试时抛出错误
+    }
+  }
+}
+
 // 翻译未翻译的文章
 async function translateUntranslatedArticles() {
   try {
@@ -63,7 +84,6 @@ async function translateUntranslatedArticles() {
           summary: article.summary?.length || 0
         });
         
-        // 检查内容是否存在
         if (!article.content) {
           console.log('警告: 文章内容为空');
         }
@@ -71,11 +91,11 @@ async function translateUntranslatedArticles() {
           console.log('警告: 文章摘要为空');
         }
 
-        // 翻译标题、内容和摘要
+        // 使用重试机制翻译
         const [titleResult, contentResult, summaryResult] = await Promise.all([
-          translate(article.title || '', { to: 'zh-CN' }),
-          translate(article.content || '', { to: 'zh-CN' }),
-          translate(article.summary || '', { to: 'zh-CN' })
+          retryTranslate(article.title || ''),
+          retryTranslate(article.content || ''),
+          retryTranslate(article.summary || '')
         ]);
 
         // 更新文章
@@ -99,7 +119,8 @@ async function translateUntranslatedArticles() {
           hasTranslatedSummary: !!updatedArticle.translatedSummary
         });
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // 翻译成功后添加较长延迟，避免请求过快
+        await delay(3000);
       } catch (error) {
         console.error(`翻译文章失败: ${article.title}`, error);
         console.error('错误详情:', {
