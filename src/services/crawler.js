@@ -295,8 +295,16 @@ class CrawlerService {
       // 先获取摘要
       const $abstract = $('.abstract');
       if ($abstract.length) {
-        abstractText = $abstract.text().trim().replace('Abstract:', '').trim();
-        contentParts.push('摘要：\n' + abstractText + '\n\n');
+        abstractText = $abstract.text()
+          .trim()
+          .replace('Abstract:', '')
+          .trim();
+      }
+
+      // 如果没有找到摘要，从正文生成摘要
+      if (!abstractText) {
+        const firstParagraph = $('.ltx_section').first().find('p').first().text().trim();
+        abstractText = firstParagraph.substring(0, 200) + '...';
       }
 
       // 获取正文各个部分
@@ -343,12 +351,15 @@ class CrawlerService {
 
       console.log('发布日期:', pubDate);
 
+      // 清理和格式化内容
+      const cleanedContent = this.cleanContent(content);
+
       return {
         title: item.title.trim(),
-        content: content,
+        content: cleanedContent,
         summary: abstractText,
         url: item.link,
-        publishDate: pubDate,  // 使用处理后的日期
+        publishDate: pubDate,
         source: source.name
       };
     } catch (error) {
@@ -650,6 +661,24 @@ class CrawlerService {
       console.error('处理 arXiv 文章失败:', error.message);
       return null;
     }
+  }
+
+  cleanContent(content) {
+    if (!content) return '';
+
+    // 统一处理标题格式
+    return content
+      .split('\n')
+      .map(line => {
+        // 处理所有可能的标题格式
+        if (line.match(/^[#\s]+/)) {
+          // 移除所有 # 和空格，然后重新添加标准格式
+          const titleText = line.replace(/^[#\s]+/, '').trim();
+          return `### ${titleText}`;
+        }
+        return line;
+      })
+      .join('\n');
   }
 }
 
