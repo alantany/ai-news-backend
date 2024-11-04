@@ -45,10 +45,8 @@ async function translateUntranslatedArticles() {
       $or: [
         { translatedTitle: { $exists: false } },
         { translatedContent: { $exists: false } },
-        { translatedSummary: { $exists: false } },
         { translatedTitle: null },
-        { translatedContent: null },
-        { translatedSummary: null }
+        { translatedContent: null }
       ]
     });
     
@@ -58,19 +56,16 @@ async function translateUntranslatedArticles() {
       try {
         console.log(`开始翻译文章: ${article.title}`);
         
-        // 使用 CrawlerService 的清理函数处理内容
-        const crawler = new CrawlerService();
-        const cleanContent = crawler.cleanHtmlContent(article.content);
-        
-        // 翻译清理后的内容
+        // 预处理内容，统一标题格式
+        const processedContent = article.content
+          .replace(/^#\s*#\s*#\s*/gm, '### ')  // 统一 # # # 格式为 ###
+          .replace(/^#{3,}\s*/gm, '### ');      // 处理多余的 #
+
+        // 翻译处理后的内容
         const [titleResult, contentResult] = await Promise.all([
           translate(article.title, { to: 'zh-CN' }),
-          translate(cleanContent, { to: 'zh-CN' })  // 翻译清理后的内容
+          translate(processedContent, { to: 'zh-CN' })
         ]);
-
-        // 生成并翻译摘要
-        const summary = crawler.generateSummary(cleanContent);  // 使用清理后的内容生成摘要
-        const summaryResult = await translate(summary, { to: 'zh-CN' });
 
         // 更新文章
         const updatedArticle = await Article.findByIdAndUpdate(
@@ -79,7 +74,6 @@ async function translateUntranslatedArticles() {
             $set: {
               translatedTitle: titleResult.text,
               translatedContent: contentResult.text,
-              translatedSummary: summaryResult.text,
               isTranslated: true
             }
           },
