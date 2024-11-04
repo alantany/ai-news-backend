@@ -214,17 +214,13 @@ class CrawlerService {
       for (const source of this.rssSources) {
         try {
           console.log(`\n抓取源: ${source.name}`);
-          console.log('URL:', source.url);
-          
           const feed = await this.parser.parseURL(source.url);
-          console.log('获取到原始文章数:', feed.items?.length);
           
           // 处理每篇文章
           for (const item of feed.items) {
             const processedArticle = await this.processRssItem(item, source);
             if (processedArticle) {
               allArticles.push(processedArticle);
-              console.log('处理成功:', processedArticle.title);
             }
           }
         } catch (error) {
@@ -239,22 +235,33 @@ class CrawlerService {
       const savedArticles = [];
       for (const article of allArticles) {
         try {
+          // 先检查文章是否已存在
+          const existingArticle = await Article.findOne({ url: article.url });
+          if (existingArticle) {
+            console.log('文章已存在，跳过:', article.title);
+            continue;
+          }
+
+          // 保存新文章
           const savedArticle = await Article.create(article);
           console.log('保存成功:', savedArticle.title);
           savedArticles.push(savedArticle);
         } catch (error) {
-          console.error('保存失败:', {
-            title: article.title,
-            error: error.message,
-            details: error
-          });
+          if (error.code === 11000) {  // 重复键错误
+            console.log('文章已存在（并发检查）:', article.title);
+          } else {
+            console.error('保存失败:', {
+              title: article.title,
+              error: error.message
+            });
+          }
         }
       }
 
       console.log(`\n本次保存: ${savedArticles.length} 篇`);
       return savedArticles;
     } catch (error) {
-      console.error('���取过程失败:', error);
+      console.error('抓取过程失败:', error);
       throw error;
     }
   }
