@@ -345,10 +345,36 @@ class CrawlerService {
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // 提取摘要（不包含"摘要："标签）
-      const abstract = $('.abstract').text()
-        .replace('Abstract:', '')
-        .trim();
+      // 尝试多个可能的摘要选择器
+      let abstract = '';
+      const abstractSelectors = [
+        '.abstract',
+        '.ltx_abstract',
+        '#abstract',
+        'div[class*="abstract"]',
+        'div[id*="abstract"]'
+      ];
+
+      for (const selector of abstractSelectors) {
+        const $abstract = $(selector);
+        if ($abstract.length) {
+          abstract = $abstract.text()
+            .replace(/^Abstract[.: ]*/, '')  // 移除 "Abstract:" 前缀
+            .trim();
+          if (abstract) break;
+        }
+      }
+
+      // 如果还是找不到摘要，尝试从第一段获取
+      if (!abstract) {
+        abstract = $('p').first().text().trim();
+      }
+
+      console.log('摘要提取结果:', {
+        found: !!abstract,
+        length: abstract.length,
+        preview: abstract.substring(0, 100) + '...'
+      });
 
       // 提取正文（跳过作者和摘要部分）
       let contentParts = [];
