@@ -59,17 +59,41 @@ router.get('/', async (req, res) => {
 // 点赞文章
 router.post('/:id/like', async (req, res) => {
   try {
-    const article = await Article.findById(req.params.id);
-    if (!article) {
-      return res.status(404).json({ message: '文章不存在' });
-    }
-    
-    article.likes = (article.likes || 0) + 1;
-    await article.save();
-    
-    res.json({ likes: article.likes });
+    const article = await Article.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { likes: 1 } },
+      { new: true }
+    );
+    res.json(article);
   } catch (error) {
-    console.error('点赞文章错误:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 收藏文章
+router.post('/:id/star', async (req, res) => {
+  try {
+    const article = await Article.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { stars: 1 } },
+      { new: true }
+    );
+    res.json(article);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 更新阅读数
+router.post('/:id/read', async (req, res) => {
+  try {
+    const article = await Article.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { reads: 1 } },
+      { new: true }
+    );
+    res.json(article);
+  } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
