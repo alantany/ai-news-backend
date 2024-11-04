@@ -100,18 +100,34 @@ router.post('/crawl', async (req, res) => {
   }
 });
 
-// 清理文章
+// 清除所有文章
 router.post('/clear-articles', async (req, res) => {
   try {
     console.log('收到清除文章请求');
+    
+    // 使用 deleteMany 确保完全清除
     const result = await Article.deleteMany({});
-    console.log(`清理完成，共删除 ${result.deletedCount} 篇文章`);
+    console.log('清除结果:', {
+      acknowledged: result.acknowledged,
+      deletedCount: result.deletedCount
+    });
+
+    // 验证是否完全清除
+    const remainingCount = await Article.countDocuments();
+    console.log('剩余文章数:', remainingCount);
+
+    if (remainingCount > 0) {
+      // 如果还有剩余，强制再次清除
+      await Article.collection.drop();
+      console.log('强制清除完成');
+    }
+
     res.json({ 
-      message: '清理成功', 
-      deletedCount: result.deletedCount 
+      message: `清理完成，共删除 ${result.deletedCount} 篇文章`,
+      remainingCount: await Article.countDocuments()
     });
   } catch (error) {
-    console.error('清理文章失败:', error);
+    console.error('清除文章失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
