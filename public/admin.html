@@ -73,11 +73,34 @@
             resize: vertical;
             font-family: inherit;
         }
+        .countdown {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .countdown h3 {
+            margin: 0 0 10px;
+            color: #666;
+        }
+
+        #timer {
+            font-size: 24px;
+            font-weight: bold;
+            color: #07c160;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>AI 新闻聚合 - 管理后台</h1>
+        
+        <div class="countdown">
+            <h3>下次抓取</h3>
+            <div id="timer">--:--:--</div>
+        </div>
         
         <div class="control-panel">
             <div class="settings">
@@ -201,6 +224,41 @@
 
         // 页面加载时获取当前设置
         loadSettings();
+
+        // 更新倒计时
+        function updateCountdown() {
+            fetch(`${BASE_URL}/settings`)
+                .then(res => res.json())
+                .then(settings => {
+                    const interval = settings.crawlInterval || 60;
+                    const lastCrawl = new Date(settings.lastCrawl || Date.now());
+                    const nextCrawl = new Date(lastCrawl.getTime() + interval * 60000);
+                    
+                    function updateTimer() {
+                        const now = new Date();
+                        const diff = nextCrawl - now;
+                        
+                        if (diff <= 0) {
+                            document.getElementById('timer').textContent = '即将开始';
+                            return;
+                        }
+                        
+                        const hours = Math.floor(diff / 3600000);
+                        const minutes = Math.floor((diff % 3600000) / 60000);
+                        const seconds = Math.floor((diff % 60000) / 1000);
+                        
+                        document.getElementById('timer').textContent = 
+                            `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                    }
+                    
+                    updateTimer();
+                    setInterval(updateTimer, 1000);
+                })
+                .catch(console.error);
+        }
+
+        // 页面加载时启动倒计时
+        updateCountdown();
     </script>
 </body>
 </html> 
