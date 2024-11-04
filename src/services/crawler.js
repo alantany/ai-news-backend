@@ -301,100 +301,215 @@ class CrawlerService {
     try {
       console.log('处理文章:', item.title);
 
-      if (!item.title) {
-        console.log('文章缺少标题，跳过');
+      if (!item.title || !item.link) {
+        console.log('文章缺少标题或链接，跳过');
         return null;
       }
 
-      // 获取 arXiv ID
-      const arxivId = item.link.match(/\d{4}\.\d{5}/)?.[0];
+      // 根据不同源使用不同的处理逻辑
+      let content = '';
+      let pubDate = null;
+
+      switch (source.name) {
+        case 'arXiv RAG Papers':
+          return await this.processArxivArticle(item, source);
+        
+        case 'Microsoft AI Blog':
+          return await this.processMicrosoftArticle(item, source);
+        
+        case 'Google AI Blog':
+          return await this.processGoogleArticle(item, source);
+        
+        default:
+          console.log('未知的源类型:', source.name);
+          return null;
+      }
+    } catch (error) {
+      console.error('处理文章失败:', error);
+      return null;
+    }
+  }
+
+  // arXiv 文章处理
+  async processArxivArticle(item, source) {
+    try {
+      console.log('arXiv 原始数据:', {
+        title: item.title,
+        link: item.link,
+        id: item.id
+      });
+
+      // 从 link 中提取 arXiv ID，支持多种格式
+      let arxivId;
+      const patterns = [
+        /arxiv\.org\/abs\/([\d.]+)/,    // 标准格式
+        /arxiv\.org\/pdf\/([\d.]+)/,     // PDF 链接
+        /\/(\d{4}\.\d{5})(?:v\d+)?$/,    // 纯数字格式
+        /(\d{4}\.\d{5})(?:v\d+)?/        // 任何位置的 arXiv ID
+      ];
+
+      for (const pattern of patterns) {
+        const match = (item.link || '').match(pattern);
+        if (match) {
+          arxivId = match[1];
+          break;
+        }
+      }
+
       if (!arxivId) {
-        console.log('无法获取 arXiv ID');
+        console.error('无法获取 arXiv ID，原始链接:', item.link);
         return null;
       }
 
-      // 获取 HTML 内容
+      console.log('获取到 arXiv ID:', arxivId);
       const htmlUrl = `https://arxiv.org/html/${arxivId}`;
+      console.log('获取 HTML 版本:', htmlUrl);
+
       const response = await fetch(htmlUrl);
+      if (!response.ok) {
+        console.error('获取 HTML 失败:', response.status);
+        return null;
+      }
+
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // 提取内容并强制分段
-      let contentParts = [];
-      let abstractText = '';
-
-      // 先获取摘要
-      const $abstract = $('.abstract');
-      if ($abstract.length) {
-        abstractText = $abstract.text()
-          .trim()
-          .replace('Abstract:', '')
-          .trim();
-      }
-
-      // 如果没有找到摘要，从正文生成摘要
-      if (!abstractText) {
-        const firstParagraph = $('.ltx_section').first().find('p').first().text().trim();
-        abstractText = firstParagraph.substring(0, 200) + '...';
-      }
-
-      // 获取正文各个部分
+      // 更新作者提取逻辑
+      let authors = '';
+      $('.ltx_authors .ltx_personname').each((i, el) => {
+        authors += (i > 0 ? ', ' : '') + $(el).text().trim();
+      });
+      console.log('作者:', authors);
+      
+      // 更新摘要提取逻辑
+      let abstract = '';
+      $('.ltx_abstract').each((i, el) => {
+        const text = $(el).text().trim();
+        if (text && !abstract) {  // 只取第一个摘要
+          abstract = text.replace(/^Abstract[.: ]*/, '').trim();
+        }
+      });
+      console.log('摘要长度:', abstract.length);
+      
+      // 更新正文提取逻辑
+      const sections = [];
       $('.ltx_section').each((i, section) => {
         const $section = $(section);
+        const title = $section.find('.ltx_title').first().text().trim();
         
-        // 获取标题
-        let sectionTitle = $section.find('.ltx_title').first().text().trim();
-        if (sectionTitle) {
-          contentParts.push(`\n### ${sectionTitle}\n\n`);
-        }
-
-        // 获取段落
-        $section.find('p').each((j, p) => {
-          let paragraphText = $(p).text().trim();
-          if (paragraphText) {
-            contentParts.push(paragraphText + '\n\n');
+        // 收集段落
+        const paragraphs = [];
+        $section.find('p, .ltx_para').each((j, p) => {
+          const text = $(p).text().trim();
+          if (text) {
+            paragraphs.push(text);
           }
         });
+        
+        if (title && paragraphs.length > 0) {
+          sections.push(`<title>${title}</title>\n\n${paragraphs.join('\n\n')}`);
+        }
       });
+      console.log('提取到的章节数:', sections.length);
 
-      // 合并内容，确保分段
-      const content = contentParts.join('');
-
-      // 打印分段信息
-      console.log('内容分段情况:', {
-        partsCount: contentParts.length,
-        hasNewlines: content.includes('\n\n'),
-        newlineCount: (content.match(/\n/g) || []).length
-      });
-
-      // 处理发布日期
-      let pubDate;
-      if (item.pubDate) {
-        pubDate = new Date(item.pubDate);
-      } else if (item.isoDate) {
-        pubDate = new Date(item.isoDate);
-      } else {
-        // 从 arXiv ID 提取日期
-        const year = '20' + arxivId.substring(0, 2);
-        const month = arxivId.substring(2, 4);
-        pubDate = new Date(year, month - 1);
+      // 检查是否成功提取了内容
+      if (!authors || !abstract || sections.length === 0) {
+        console.log('尝试备用选择器');
+        // 备用作者选择器
+        if (!authors) {
+          authors = $('.ltx_author_notes').text().trim() || 
+                   $('[class*="author"]').text().trim();
+        }
+        // 备用摘要选择器
+        if (!abstract) {
+          abstract = $('[class*="abstract"]').text().trim() ||
+                    $('.abstract-full').text().trim();
+        }
       }
 
-      console.log('发布日期:', pubDate);
+      // 组合所有内容
+      const fullContent = [
+        `<authors>${authors || '作者信息未找到'}</authors>`,
+        `\n<abstract>摘要：\n${abstract || '摘要未找到'}</abstract>`,
+        ...sections
+      ].join('\n\n');
 
-      // 清理和格式化内容
-      const cleanedContent = this.cleanContent(content);
+      console.log('处理完成，内容统计:', {
+        hasAuthors: !!authors,
+        hasAbstract: !!abstract,
+        sectionsCount: sections.length,
+        totalLength: fullContent.length
+      });
+      
+      return fullContent;
+    } catch (error) {
+      console.error('处理 arXiv 章失败:', error.message);
+      return null;
+    }
+  }
+
+  // Microsoft 文章处理
+  async processMicrosoftArticle(item, source) {
+    try {
+      const response = await fetch(item.link);
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      // 提取内容
+      let content = '';
+      $('.article-content').find('p').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text) {
+          content += text + '\n\n';
+        }
+      });
+
+      // 生成摘要
+      const summary = content.split('\n')[0];  // 使用第一段作为摘要
 
       return {
         title: item.title.trim(),
-        content: cleanedContent,
-        summary: abstractText,
+        content: content,
+        summary: summary,
         url: item.link,
-        publishDate: pubDate,
+        publishDate: new Date(item.pubDate || item.isoDate),
         source: source.name
       };
     } catch (error) {
-      console.error('处理文章失败:', error);
+      console.error('处理 Microsoft 文章失败:', error);
+      return null;
+    }
+  }
+
+  // Google 文章处理
+  async processGoogleArticle(item, source) {
+    try {
+      const response = await fetch(item.link);
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      // 提取内容
+      let content = '';
+      $('.post-content').find('p').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text) {
+          content += text + '\n\n';
+        }
+      });
+
+      // 生成摘要
+      const summary = content.split('\n')[0];  // 使用第一段作为摘要
+
+      return {
+        title: item.title.trim(),
+        content: content,
+        summary: summary,
+        url: item.link,
+        publishDate: new Date(item.pubDate || item.isoDate),
+        source: source.name
+      };
+    } catch (error) {
+      console.error('处理 Google 文章失败:', error);
       return null;
     }
   }
@@ -529,7 +644,7 @@ class CrawlerService {
         return `[BOLD${markers.length - 1}]`;
       });
 
-      // 翻译处理��的文本
+      // 翻译处理的文本
       const { text: translatedText } = await translate(markedText, { to: 'zh-CN' });
 
       // 还原格式标记
@@ -573,123 +688,6 @@ class CrawlerService {
       };
     } catch (error) {
       console.error('获取 arXiv 内容失败:', error);
-      return null;
-    }
-  }
-
-  async processArxivArticle(item) {
-    try {
-      console.log('arXiv 原始数据:', {
-        title: item.title,
-        link: item.link,
-        id: item.id
-      });
-
-      // 从 link 中提取 arXiv ID，支持多种格式
-      let arxivId;
-      const patterns = [
-        /arxiv\.org\/abs\/([\d.]+)/,    // 标准格式
-        /arxiv\.org\/pdf\/([\d.]+)/,     // PDF 链接
-        /\/(\d{4}\.\d{5})(?:v\d+)?$/,    // 纯数字格式
-        /(\d{4}\.\d{5})(?:v\d+)?/        // 任何位置的 arXiv ID
-      ];
-
-      for (const pattern of patterns) {
-        const match = (item.link || '').match(pattern);
-        if (match) {
-          arxivId = match[1];
-          break;
-        }
-      }
-
-      if (!arxivId) {
-        console.error('无法获取 arXiv ID，原始链接:', item.link);
-        return null;
-      }
-
-      console.log('获取到 arXiv ID:', arxivId);
-      const htmlUrl = `https://arxiv.org/html/${arxivId}`;
-      console.log('获取 HTML 版本:', htmlUrl);
-
-      const response = await fetch(htmlUrl);
-      if (!response.ok) {
-        console.error('获取 HTML 失败:', response.status);
-        return null;
-      }
-
-      const html = await response.text();
-      const $ = cheerio.load(html);
-
-      // 更新作者提取逻辑
-      let authors = '';
-      $('.ltx_authors .ltx_personname').each((i, el) => {
-        authors += (i > 0 ? ', ' : '') + $(el).text().trim();
-      });
-      console.log('作者:', authors);
-      
-      // 更新摘要提取逻辑
-      let abstract = '';
-      $('.ltx_abstract').each((i, el) => {
-        const text = $(el).text().trim();
-        if (text && !abstract) {  // 只取第一个摘要
-          abstract = text.replace(/^Abstract[.: ]*/, '').trim();
-        }
-      });
-      console.log('摘要长度:', abstract.length);
-      
-      // 更新正文提取逻辑
-      const sections = [];
-      $('.ltx_section').each((i, section) => {
-        const $section = $(section);
-        const title = $section.find('.ltx_title').first().text().trim();
-        
-        // 收集段落
-        const paragraphs = [];
-        $section.find('p, .ltx_para').each((j, p) => {
-          const text = $(p).text().trim();
-          if (text) {
-            paragraphs.push(text);
-          }
-        });
-        
-        if (title && paragraphs.length > 0) {
-          sections.push(`<title>${title}</title>\n\n${paragraphs.join('\n\n')}`);
-        }
-      });
-      console.log('提取到的章节数:', sections.length);
-
-      // 检查是否成功提取了内容
-      if (!authors || !abstract || sections.length === 0) {
-        console.log('尝试备用选择器');
-        // 备用作者选择器
-        if (!authors) {
-          authors = $('.ltx_author_notes').text().trim() || 
-                   $('[class*="author"]').text().trim();
-        }
-        // 备用摘要选择器
-        if (!abstract) {
-          abstract = $('[class*="abstract"]').text().trim() ||
-                    $('.abstract-full').text().trim();
-        }
-      }
-
-      // 组合所有内容
-      const fullContent = [
-        `<authors>${authors || '作者信息未找到'}</authors>`,
-        `\n<abstract>摘要：\n${abstract || '摘要未找到'}</abstract>`,
-        ...sections
-      ].join('\n\n');
-
-      console.log('处理完成，内容统计:', {
-        hasAuthors: !!authors,
-        hasAbstract: !!abstract,
-        sectionsCount: sections.length,
-        totalLength: fullContent.length
-      });
-      
-      return fullContent;
-    } catch (error) {
-      console.error('处理 arXiv 章失败:', error.message);
       return null;
     }
   }
