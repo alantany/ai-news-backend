@@ -11,6 +11,7 @@ http://export.arxiv.org/api/query?search_query=all:"Retrieval+Augmented+Generati
 
 # 删除文档：curl -X POST https://rss.kids-coder.cn/api/admin/clear-articles
 # 触发抓取：curl -X POST https://rss.kids-coder.cn/api/admin/crawl
+# 检查文章：node src/scripts/checkArticles.js
 
 
 

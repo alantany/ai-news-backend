@@ -290,11 +290,13 @@ class CrawlerService {
 
       // 提取内容并强制分段
       let contentParts = [];
+      let abstractText = '';
 
       // 先获取摘要
-      const abstract = $('.abstract').text().trim();
-      if (abstract) {
-        contentParts.push('摘要：\n' + abstract.replace('Abstract:', '').trim() + '\n\n');
+      const $abstract = $('.abstract');
+      if ($abstract.length) {
+        abstractText = $abstract.text().trim().replace('Abstract:', '').trim();
+        contentParts.push('摘要：\n' + abstractText + '\n\n');
       }
 
       // 获取正文各个部分
@@ -302,16 +304,16 @@ class CrawlerService {
         const $section = $(section);
         
         // 获取标题
-        const title = $section.find('.ltx_title').first().text().trim();
-        if (title) {
-          contentParts.push(`\n### ${title}\n\n`);
+        let sectionTitle = $section.find('.ltx_title').first().text().trim();
+        if (sectionTitle) {
+          contentParts.push(`\n### ${sectionTitle}\n\n`);
         }
 
         // 获取段落
         $section.find('p').each((j, p) => {
-          const text = $(p).text().trim();
-          if (text) {
-            contentParts.push(text + '\n\n');
+          let paragraphText = $(p).text().trim();
+          if (paragraphText) {
+            contentParts.push(paragraphText + '\n\n');
           }
         });
       });
@@ -323,57 +325,13 @@ class CrawlerService {
       console.log('内容分段情况:', {
         partsCount: contentParts.length,
         hasNewlines: content.includes('\n\n'),
-        firstPart: contentParts[0]?.substring(0, 100),
         newlineCount: (content.match(/\n/g) || []).length
-      });
-
-      // 处理数学公式和引用
-      $('.ltx_equation, .ltx_cite').each((i, elem) => {
-        const text = $(elem).text().trim();
-        if (text) {
-          content = content.replace(text, `**${text}**`);  // 加粗处理
-        }
-      });
-
-      // 处理重要术语
-      $('.ltx_theorem, .ltx_definition').each((i, elem) => {
-        const text = $(elem).text().trim();
-        if (text) {
-          content = content.replace(text, `**${text}**`);
-        }
-      });
-
-      // 清理和格式化内容
-      content = content
-        .replace(/\n{3,}/g, '\n\n')  // 多个换行替换为两个
-        .replace(/\s+/g, ' ')        // 合并多个空格
-        .trim();
-
-      // 生成摘要
-      const summary = content.substring(0, 200) + '...';
-
-      // 处理发布日期
-      let publishDate = new Date(item.pubDate || item.isoDate);
-      if (!publishDate || isNaN(publishDate)) {
-        const year = '20' + arxivId.substring(0, 2);
-        const month = arxivId.substring(2, 4);
-        publishDate = new Date(year, month - 1);
-      }
-
-      // 打印调试信息
-      console.log('处理结果:', {
-        hasTitle: !!item.title,
-        hasUrl: !!item.link,
-        hasContent: !!content,
-        contentLength: content.length,
-        hasSummary: !!summary,
-        publishDate: publishDate
       });
 
       return {
         title: item.title.trim(),
         content: content,
-        summary: summary,
+        summary: abstractText,
         url: item.link,
         publishDate: publishDate,
         source: source.name
