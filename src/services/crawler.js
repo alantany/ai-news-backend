@@ -282,50 +282,49 @@ class CrawlerService {
         return null;
       }
 
-      // 获取 HTML 版本的内容
-      console.log('获取文章内容:', arxivId);
+      // 获取 HTML 内容
       const htmlUrl = `https://arxiv.org/html/${arxivId}`;
       const response = await fetch(htmlUrl);
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // 提取内容时强制分段
-      let sections = [];
+      // 提取内容并强制分段
+      let contentParts = [];
+
+      // 先获取摘要
+      const abstract = $('.abstract').text().trim();
+      if (abstract) {
+        contentParts.push('摘要：\n' + abstract.replace('Abstract:', '').trim() + '\n\n');
+      }
+
+      // 获取正文各个部分
       $('.ltx_section').each((i, section) => {
         const $section = $(section);
-        const title = $section.find('.ltx_title').first().text().trim();
         
-        // 收集段落
-        const paragraphs = [];
-        $section.find('p, .ltx_para').each((j, p) => {
+        // 获取标题
+        const title = $section.find('.ltx_title').first().text().trim();
+        if (title) {
+          contentParts.push(`\n### ${title}\n\n`);
+        }
+
+        // 获取段落
+        $section.find('p').each((j, p) => {
           const text = $(p).text().trim();
           if (text) {
-            paragraphs.push(text);
+            contentParts.push(text + '\n\n');
           }
         });
-        
-        if (title && paragraphs.length > 0) {
-          sections.push({
-            title: title,
-            content: paragraphs
-          });
-        }
       });
 
-      // 组合内容，确保分段
-      let content = '';
-      sections.forEach(section => {
-        content += `\n### ${section.title}\n\n`;  // 使用 ### 作为标题标记
-        section.content.forEach(paragraph => {
-          content += `${paragraph}\n\n`;  // 每个段落后添加两个换行
-        });
-      });
+      // 合并内容，确保分段
+      const content = contentParts.join('');
 
       // 打印分段信息
-      console.log('内容处理结果:', {
-        sectionsCount: sections.length,
-        totalParagraphs: sections.reduce((sum, s) => sum + s.content.length, 0),
-        contentLength: content.length
+      console.log('内容分段情况:', {
+        partsCount: contentParts.length,
+        hasNewlines: content.includes('\n\n'),
+        firstPart: contentParts[0]?.substring(0, 100),
+        newlineCount: (content.match(/\n/g) || []).length
       });
 
       // 处理数学公式和引用
@@ -351,8 +350,7 @@ class CrawlerService {
         .trim();
 
       // 生成摘要
-      const abstract = $('.abstract').text().trim();
-      const summary = abstract.replace('Abstract:', '').trim();
+      const summary = content.substring(0, 200) + '...';
 
       // 处理发布日期
       let publishDate = new Date(item.pubDate || item.isoDate);
@@ -374,7 +372,7 @@ class CrawlerService {
 
       return {
         title: item.title.trim(),
-        content: content.trim(),
+        content: content,
         summary: summary,
         url: item.link,
         publishDate: publishDate,
