@@ -505,34 +505,45 @@ class CrawlerService {
   async processGoogleArticle(item, source) {
     try {
       console.log('处理 Google 文章:', item.title);
-      const response = await fetch(item.link);
-      const html = await response.text();
-      const $ = cheerio.load(html);
+      console.log('原始内容预览:', item.content?.substring(0, 200));
       
-      // 提取内容，尝试多个可能的选择器
+      // Google AI Blog 的内容直接在 RSS feed 中
+      const $ = cheerio.load(item.content || item.description || '');
+      
       let contentParts = [];
       
-      // 尝试不同的内容选择器
-      $('.post-content, .entry-content, article, .blog-post').find('p, h2, h3').each((i, elem) => {
+      // 处理所有段落和标题
+      $('*').each((i, elem) => {
         const text = $(elem).text().trim();
         if (text) {
-          if (elem.tagName === 'h2' || elem.tagName === 'h3') {
-            contentParts.push(`### ${text}\n\n`);  // 添加标题标记
+          // 检查是否是标题样式
+          const fontSize = $(elem).css('font-size');
+          const isBold = $(elem).css('font-weight') === 'bold';
+          
+          if (fontSize?.includes('px') && parseInt(fontSize) > 14 || isBold) {
+            contentParts.push(`### ${text}\n\n`);
           } else {
             contentParts.push(`${text}\n\n`);
           }
         }
       });
 
-      const content = contentParts.join('');
-      console.log('Google 文章内容长度:', content.length);
+      // 移除重复内容
+      const content = this.cleanContent(contentParts.join(''));
+      console.log('Google 文章处理结果:', {
+        title: item.title,
+        contentLength: content.length,
+        hasContent: content.length > 0
+      });
 
-      // 生成摘要
-      const summary = contentParts.find(p => p.length > 50)?.substring(0, 200) || '';
+      // 生成摘要：使用第一段非空内容
+      const summary = contentParts
+        .find(p => p.length > 50 && !p.startsWith('###'))
+        ?.substring(0, 200) || '';
 
       return {
         title: item.title.trim(),
-        content: this.cleanContent(content),
+        content: content,
         summary: summary,
         url: item.link,
         publishDate: new Date(item.pubDate || item.isoDate),
@@ -540,6 +551,12 @@ class CrawlerService {
       };
     } catch (error) {
       console.error('处理 Google 文章失败:', error);
+      console.error('错误详情:', error.message);
+      console.error('文章信息:', {
+        title: item.title,
+        hasContent: !!item.content,
+        hasDescription: !!item.description
+      });
       return null;
     }
   }
