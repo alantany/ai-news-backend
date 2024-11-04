@@ -4,6 +4,7 @@ const Admin = require('../models/Admin');
 const Setting = require('../models/Setting');
 const CrawlerService = require('../services/crawler');
 const Article = require('../models/Article');
+const { translateUntranslatedArticles } = require('../app');  // 导入翻译函数
 
 // 验证密码
 router.post('/password/verify', async (req, res) => {
@@ -81,22 +82,14 @@ router.post('/crawl', async (req, res) => {
     const crawler = new CrawlerService();
     const articles = await crawler.crawl();
     
-    // 确保响应头设置正确
-    res.setHeader('Connection', 'close');
-    res.json({ 
-      message: '抓取成功', 
-      count: articles.length 
-    });
+    // 抓取完成后立即触发翻译
+    console.log('开始翻译新抓取的文章');
+    await translateUntranslatedArticles();
+    
+    res.json({ message: '抓取和翻译完成', count: articles.length });
   } catch (error) {
-    console.error('手动抓取错误:', error);
-    // 确保错误响应也设置正确的头
-    res.setHeader('Connection', 'close');
+    console.error('手动抓取失败:', error);
     res.status(500).json({ message: error.message });
-  } finally {
-    // 确保响应结束
-    if (!res.headersSent) {
-      res.end();
-    }
   }
 });
 
