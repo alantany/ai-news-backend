@@ -216,22 +216,26 @@ class CrawlerService {
       
       let allArticles = [];
       
+      // 分别处理每个源
       for (const source of this.rssSources) {
         try {
           console.log(`\n抓取源: ${source.name}`);
-          const feed = await this.parser.parseURL(source.url);
+          console.log('源URL:', source.url);
           
-          // 处理每篇文章
-          const articles = [];
+          const feed = await this.parser.parseURL(source.url);
+          console.log(`源返回文章数: ${feed.items.length}`);
+          
+          // 处理当前源的文章
+          const sourceArticles = [];
           for (const item of feed.items.slice(0, articlesPerSource)) {
             const processedArticle = await this.processRssItem(item, source);
             if (processedArticle) {
-              articles.push(processedArticle);
+              sourceArticles.push(processedArticle);
             }
           }
 
-          allArticles.push(...articles);
-          console.log(`获取到 ${articles.length} 篇文章`);
+          allArticles.push(...sourceArticles);
+          console.log(`从 ${source.name} 获取到 ${sourceArticles.length} 篇文章`);
         } catch (error) {
           console.error(`抓取失败: ${source.name}`, error);
           continue;
@@ -244,7 +248,6 @@ class CrawlerService {
       const savedArticles = [];
       for (const article of allArticles) {
         try {
-          // 使用 title 和 url 组合来判断文章是否存在
           const existingArticle = await Article.findOne({
             $or: [
               { title: article.title },
@@ -268,7 +271,9 @@ class CrawlerService {
         }
       }
 
-      console.log(`\n本次保存: ${savedArticles.length} 篇`);
+      console.log('\n保存统计:');
+      console.log(`总处理文章数: ${allArticles.length}`);
+      console.log(`成功保存文章数: ${savedArticles.length}`);
       return savedArticles;
     } catch (error) {
       console.error('抓取过程失败:', error);
@@ -676,7 +681,7 @@ class CrawlerService {
   cleanContent(content) {
     if (!content) return '';
 
-    // 统一处理标���格式
+    // 统一处理标格式
     return content
       .split('\n')
       .map(line => {
