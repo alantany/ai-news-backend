@@ -208,6 +208,11 @@ class CrawlerService {
       await this.loadRssSources();
       console.log('\n============= 开始抓取文章 =============');
       
+      // 从设置中获取每个源的文章数量
+      const settings = await Setting.findOne() || { preArticlesPerSource: 5 };
+      const articlesPerSource = settings.preArticlesPerSource;
+      console.log(`每个源抓取数量: ${articlesPerSource}`);
+      
       let allArticles = [];
       
       // 遍历所有 RSS 源
@@ -216,13 +221,14 @@ class CrawlerService {
           console.log(`\n抓取源: ${source.name}`);
           const feed = await this.parser.parseURL(source.url);
           
-          // 处理每篇文章
-          for (const item of feed.items) {
-            const processedArticle = await this.processRssItem(item, source);
-            if (processedArticle) {
-              allArticles.push(processedArticle);
-            }
-          }
+          // 使用设置中的数量限制
+          const articles = feed.items
+            .slice(0, articlesPerSource)
+            .map(item => this.processRssItem(item, source))
+            .filter(article => article !== null);
+
+          allArticles.push(...articles);
+          console.log(`获取到 ${articles.length} 篇文章`);
         } catch (error) {
           console.error(`抓取失败: ${source.name}`, error);
           continue;
