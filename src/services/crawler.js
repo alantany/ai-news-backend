@@ -85,7 +85,10 @@ class CrawlerService {
     try {
       const rssListPath = path.join(__dirname, '../../rss_list.txt');
       const content = await fs.readFile(rssListPath, 'utf-8');
-      const urls = content.split('\n')
+      
+      // 过滤注释和空行，只保留有效的 URL
+      const urls = content
+        .split('\n')
         .map(line => line.trim())
         .filter(line => line && !line.startsWith('#'));
 
@@ -94,14 +97,21 @@ class CrawlerService {
         url: url
       }));
 
-      // 如果配置了 arXiv，添加 RAG 论文源
-      if (this.rssSources.some(s => s.name === 'arXiv RAG Papers')) {
-        await this.loadArxivPapers();
-      }
+      console.log('加载 RSS 源:', this.rssSources.map(s => ({
+        name: s.name,
+        url: s.url
+      })));
     } catch (error) {
       console.error('加载 RSS 源失败:', error);
       this.rssSources = [];
     }
+  }
+
+  getRssSourceName(url) {
+    if (url.includes('microsoft.com')) return 'Microsoft AI Blog';
+    if (url.includes('research.google')) return 'Google AI Blog';
+    if (url.includes('arxiv.org')) return 'arXiv RAG Papers';
+    return new URL(url).hostname;
   }
 
   async loadArxivPapers() {
@@ -135,14 +145,6 @@ class CrawlerService {
     } catch (error) {
       console.error('获取 arXiv 论文失败:', error);
     }
-  }
-
-  getRssSourceName(url) {
-    if (url.includes('towardsdatascience.com')) return 'Towards Data Science';
-    if (url.includes('blogs.microsoft.com')) return 'Microsoft AI Blog';
-    if (url.includes('blog.research.google')) return 'Google AI Blog';
-    if (url.includes('arxiv.org')) return 'arXiv RAG Papers';
-    return new URL(url).hostname;
   }
 
   calculateArticleScore(title = '', source = '') {
@@ -674,7 +676,7 @@ class CrawlerService {
   cleanContent(content) {
     if (!content) return '';
 
-    // 统一处理标题格式
+    // 统一处理标���格式
     return content
       .split('\n')
       .map(line => {
