@@ -328,12 +328,27 @@ class CrawlerService {
         newlineCount: (content.match(/\n/g) || []).length
       });
 
+      // 处理发布日期
+      let pubDate;
+      if (item.pubDate) {
+        pubDate = new Date(item.pubDate);
+      } else if (item.isoDate) {
+        pubDate = new Date(item.isoDate);
+      } else {
+        // 从 arXiv ID 提取日期
+        const year = '20' + arxivId.substring(0, 2);
+        const month = arxivId.substring(2, 4);
+        pubDate = new Date(year, month - 1);
+      }
+
+      console.log('发布日期:', pubDate);
+
       return {
         title: item.title.trim(),
         content: content,
         summary: abstractText,
         url: item.link,
-        publishDate: publishDate,
+        publishDate: pubDate,  // 使用处理后的日期
         source: source.name
       };
     } catch (error) {
