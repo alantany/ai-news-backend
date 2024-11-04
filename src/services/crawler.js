@@ -333,127 +333,62 @@ class CrawlerService {
   // arXiv 文章处理
   async processArxivArticle(item, source) {
     try {
-      console.log('arXiv 原始数据:', {
-        title: item.title,
-        link: item.link,
-        id: item.id
-      });
-
-      // 从 link 中提取 arXiv ID，支持多种格式
-      let arxivId;
-      const patterns = [
-        /arxiv\.org\/abs\/([\d.]+)/,    // 标准格式
-        /arxiv\.org\/pdf\/([\d.]+)/,     // PDF 链接
-        /\/(\d{4}\.\d{5})(?:v\d+)?$/,    // 纯数字格式
-        /(\d{4}\.\d{5})(?:v\d+)?/        // 任何位置的 arXiv ID
-      ];
-
-      for (const pattern of patterns) {
-        const match = (item.link || '').match(pattern);
-        if (match) {
-          arxivId = match[1];
-          break;
-        }
-      }
-
+      const arxivId = item.link.match(/\d{4}\.\d{5}/)?.[0];
       if (!arxivId) {
-        console.error('无法获取 arXiv ID，原始链接:', item.link);
+        console.log('无法获取 arXiv ID');
         return null;
       }
 
-      console.log('获取到 arXiv ID:', arxivId);
+      console.log('获取 arXiv 文章:', arxivId);
       const htmlUrl = `https://arxiv.org/html/${arxivId}`;
-      console.log('获取 HTML 版本:', htmlUrl);
-
       const response = await fetch(htmlUrl);
-      if (!response.ok) {
-        console.error('获取 HTML 失败:', response.status);
-        return null;
-      }
-
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // 更新作者提取逻辑
-      let authors = '';
-      $('.ltx_authors .ltx_personname').each((i, el) => {
-        authors += (i > 0 ? ', ' : '') + $(el).text().trim();
-      });
-      console.log('作者:', authors);
-      
-      // 更新摘要提取逻辑
-      let abstract = '';
-      $('.ltx_abstract').each((i, el) => {
-        const text = $(el).text().trim();
-        if (text && !abstract) {  // 只取第一个摘要
-          abstract = text.replace(/^Abstract[.: ]*/, '').trim();
-        }
-      });
-      console.log('摘要长度:', abstract.length);
-      
-      // 更新正文提取逻辑
-      const sections = [];
+      // 提取摘要（不包含"摘要："标签）
+      const abstract = $('.abstract').text()
+        .replace('Abstract:', '')
+        .trim();
+
+      // 提取正文（跳过作者和摘要部分）
+      let contentParts = [];
       $('.ltx_section').each((i, section) => {
         const $section = $(section);
         const title = $section.find('.ltx_title').first().text().trim();
         
-        // 收集段落
-        const paragraphs = [];
-        $section.find('p, .ltx_para').each((j, p) => {
+        if (title) {
+          contentParts.push(`### ${title}\n\n`);  // 使用 ### 标记标题
+        }
+
+        // 提取段落
+        $section.find('p').each((j, p) => {
           const text = $(p).text().trim();
           if (text) {
-            paragraphs.push(text);
+            contentParts.push(`${text}\n\n`);
           }
         });
-        
-        if (title && paragraphs.length > 0) {
-          sections.push(`<title>${title}</title>\n\n${paragraphs.join('\n\n')}`);
-        }
       });
-      console.log('提取到的章节数:', sections.length);
 
-      // 检查是否成功提取了内容
-      if (!authors || !abstract || sections.length === 0) {
-        console.log('尝试备用选择器');
-        // 备用作者选择器
-        if (!authors) {
-          authors = $('.ltx_author_notes').text().trim() || 
-                   $('[class*="author"]').text().trim();
-        }
-        // 备用摘要选择器
-        if (!abstract) {
-          abstract = $('[class*="abstract"]').text().trim() ||
-                    $('.abstract-full').text().trim();
-        }
-      }
+      // 组合内容
+      const content = contentParts.join('');
 
-      // 组合所有内容
-      const fullContent = [
-        `<authors>${authors || '作者信息未找到'}</authors>`,
-        `\n<abstract>摘要：\n${abstract || '摘要未找到'}</abstract>`,
-        ...sections
-      ].join('\n\n');
-
-      console.log('处理完成，内容统计:', {
-        hasAuthors: !!authors,
+      console.log('内容处理结果:', {
         hasAbstract: !!abstract,
-        sectionsCount: sections.length,
-        totalLength: fullContent.length
+        abstractLength: abstract.length,
+        contentParts: contentParts.length,
+        contentLength: content.length
       });
-      
-      // 在保存前清理内容
-      const cleanedContent = this.cleanContent(fullContent);
-      
+
       return {
         title: item.title.trim(),
-        content: cleanedContent,
-        summary: this.generateSummary(cleanedContent),
+        content: content,           // 只包含正文，不包含作者和摘要
+        summary: abstract,          // 使用摘要作为概要
         url: item.link,
         publishDate: new Date(item.pubDate || item.isoDate),
         source: source.name
       };
     } catch (error) {
-      console.error('处理 arXiv 章失败:', error.message);
+      console.error('处理 arXiv 文章失败:', error);
       return null;
     }
   }
