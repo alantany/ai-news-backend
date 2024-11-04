@@ -4,8 +4,8 @@ https://blogs.microsoft.com/ai/feed/
 # Google AI Blog
 https://blog.research.google/feeds/posts/default
 
-# arXiv RAG Papers
-http://export.arxiv.org/api/query?search_query=all:"Retrieval+Augmented+Generation"+OR+all:RAG&sortBy=submittedDate&sortOrder=descending
+# arXiv RAG Papers - 获取一个月内的文章
+http://export.arxiv.org/api/query?search_query=all:"Retrieval+Augmented+Generation"+OR+all:RAG&sortBy=submittedDate&sortOrder=descending&start=0&max_results=100&from=-1m
 
 
 
