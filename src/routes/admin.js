@@ -4,7 +4,7 @@ const Admin = require('../models/Admin');
 const Setting = require('../models/Setting');
 const CrawlerService = require('../services/crawler');
 const Article = require('../models/Article');
-const { translateUntranslatedArticles } = require('../app');  // 从 app.js 导入
+const { translateUntranslatedArticles } = require('../services/translator');  // 从新文件导入
 
 // 验证密码
 router.post('/password/verify', async (req, res) => {
