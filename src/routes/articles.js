@@ -24,6 +24,38 @@ async function translateWithRetry(text, retries = 3) {
   }
 }
 
+// 使用内存缓存，定期批量更新数据库
+const statsCache = {
+  likes: new Map(),
+  stars: new Map(),
+  reads: new Map()
+};
+
+// 定期将缓存写入数据库
+setInterval(async () => {
+  try {
+    // 处理点赞数据
+    for (const [id, count] of statsCache.likes) {
+      await Article.findByIdAndUpdate(id, { $inc: { likes: count } });
+      statsCache.likes.delete(id);
+    }
+    
+    // 处理收藏数据
+    for (const [id, count] of statsCache.stars) {
+      await Article.findByIdAndUpdate(id, { $inc: { stars: count } });
+      statsCache.stars.delete(id);
+    }
+    
+    // 处理阅读数据
+    for (const [id, count] of statsCache.reads) {
+      await Article.findByIdAndUpdate(id, { $inc: { reads: count } });
+      statsCache.reads.delete(id);
+    }
+  } catch (error) {
+    console.error('批量更新统计数据失败:', error);
+  }
+}, 5000);  // 每5秒更新一次数据库
+
 // 获取文章总数
 router.get('/count', async (req, res) => {
   try {
@@ -59,12 +91,14 @@ router.get('/', async (req, res) => {
 // 点赞文章
 router.post('/:id/like', async (req, res) => {
   try {
-    const article = await Article.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { likes: 1 } },
-      { new: true }
-    );
-    res.json(article);
+    const id = req.params.id;
+    statsCache.likes.set(id, (statsCache.likes.get(id) || 0) + 1);
+    
+    // 获取当前统计数据
+    const article = await Article.findById(id);
+    const likes = (article.likes || 0) + (statsCache.likes.get(id) || 0);
+    
+    res.json({ likes });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -73,12 +107,14 @@ router.post('/:id/like', async (req, res) => {
 // 收藏文章
 router.post('/:id/star', async (req, res) => {
   try {
-    const article = await Article.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { stars: 1 } },
-      { new: true }
-    );
-    res.json(article);
+    const id = req.params.id;
+    statsCache.stars.set(id, (statsCache.stars.get(id) || 0) + 1);
+    
+    // 获取当前统计数据
+    const article = await Article.findById(id);
+    const stars = (article.stars || 0) + (statsCache.stars.get(id) || 0);
+    
+    res.json({ stars });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -87,12 +123,14 @@ router.post('/:id/star', async (req, res) => {
 // 更新阅读数
 router.post('/:id/read', async (req, res) => {
   try {
-    const article = await Article.findByIdAndUpdate(
-      req.params.id,
-      { $inc: { reads: 1 } },
-      { new: true }
-    );
-    res.json(article);
+    const id = req.params.id;
+    statsCache.reads.set(id, (statsCache.reads.get(id) || 0) + 1);
+    
+    // 获取当前统计数据
+    const article = await Article.findById(id);
+    const reads = (article.reads || 0) + (statsCache.reads.get(id) || 0);
+    
+    res.json({ reads });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
