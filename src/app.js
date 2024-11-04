@@ -57,12 +57,25 @@ async function translateUntranslatedArticles() {
     for (const article of untranslatedArticles) {
       try {
         console.log(`开始翻译文章: ${article.title}`);
+        console.log('内容长度:', {
+          title: article.title?.length || 0,
+          content: article.content?.length || 0,
+          summary: article.summary?.length || 0
+        });
         
+        // 检查内容是否存在
+        if (!article.content) {
+          console.log('警告: 文章内容为空');
+        }
+        if (!article.summary) {
+          console.log('警告: 文章摘要为空');
+        }
+
         // 翻译标题、内容和摘要
         const [titleResult, contentResult, summaryResult] = await Promise.all([
-          translate(article.title, { to: 'zh-CN' }),
-          translate(article.content, { to: 'zh-CN' }),
-          translate(article.summary, { to: 'zh-CN' })
+          translate(article.title || '', { to: 'zh-CN' }),
+          translate(article.content || '', { to: 'zh-CN' }),
+          translate(article.summary || '', { to: 'zh-CN' })
         ]);
 
         // 更新文章
@@ -79,7 +92,7 @@ async function translateUntranslatedArticles() {
           { new: true }
         );
 
-        console.log('文章更新成功:', {
+        console.log('文章翻译成功:', {
           id: updatedArticle._id,
           hasTranslatedTitle: !!updatedArticle.translatedTitle,
           hasTranslatedContent: !!updatedArticle.translatedContent,
@@ -89,6 +102,10 @@ async function translateUntranslatedArticles() {
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error) {
         console.error(`翻译文章失败: ${article.title}`, error);
+        console.error('错误详情:', {
+          message: error.message,
+          stack: error.stack
+        });
         continue;
       }
     }
