@@ -214,3 +214,8 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
 });
+
+// 导出翻译函数
+module.exports = {
+  translateUntranslatedArticles
+};
