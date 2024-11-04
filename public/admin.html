@@ -65,6 +65,14 @@
             color: #2e7d32;
             display: none;
         }
+        textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+            font-family: inherit;
+        }
     </style>
 </head>
 <body>
@@ -81,6 +89,10 @@
                 <div class="form-group">
                     <label>抓取间隔（分钟）</label>
                     <input type="number" id="crawlInterval" min="1" max="1440" value="60">
+                </div>
+                <div class="form-group">
+                    <label>关键词（用逗号分隔）</label>
+                    <textarea id="keywords" rows="3" placeholder="例如: RAG, Retrieval Augmented Generation, LLM"></textarea>
                 </div>
                 <button onclick="saveSettings()">保存设置</button>
             </div>
@@ -101,6 +113,10 @@
         async function saveSettings() {
             const articlesPerSource = document.getElementById('articlesPerSource').value;
             const crawlInterval = document.getElementById('crawlInterval').value;
+            const keywords = document.getElementById('keywords').value
+                .split(',')
+                .map(k => k.trim())
+                .filter(k => k);
             
             try {
                 const response = await fetch(`${BASE_URL}/settings`, {
@@ -109,6 +125,7 @@
                     body: JSON.stringify({
                         preArticlesPerSource: parseInt(articlesPerSource),
                         crawlInterval: parseInt(crawlInterval),
+                        keywords: keywords,
                         autoCrawl: true
                     })
                 });
@@ -175,6 +192,7 @@
                     const settings = await response.json();
                     document.getElementById('articlesPerSource').value = settings.preArticlesPerSource || 20;
                     document.getElementById('crawlInterval').value = settings.crawlInterval || 60;
+                    document.getElementById('keywords').value = (settings.keywords || []).join(', ');
                 }
             } catch (error) {
                 console.error('加载设置失败:', error);
