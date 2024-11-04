@@ -441,7 +441,17 @@ class CrawlerService {
         totalLength: fullContent.length
       });
       
-      return fullContent;
+      // 在保存前清理内容
+      const cleanedContent = this.cleanContent(fullContent);
+      
+      return {
+        title: item.title.trim(),
+        content: cleanedContent,
+        summary: this.generateSummary(cleanedContent),
+        url: item.link,
+        publishDate: new Date(item.pubDate || item.isoDate),
+        source: source.name
+      };
     } catch (error) {
       console.error('处理 arXiv 章失败:', error.message);
       return null;
@@ -451,25 +461,35 @@ class CrawlerService {
   // Microsoft 文章处理
   async processMicrosoftArticle(item, source) {
     try {
+      console.log('处理 Microsoft 文章:', item.title);
       const response = await fetch(item.link);
       const html = await response.text();
       const $ = cheerio.load(html);
       
-      // 提取内容
-      let content = '';
-      $('.article-content').find('p').each((i, elem) => {
+      // 提取内容，尝试多个可能的选择器
+      let contentParts = [];
+      
+      // 尝试不同的内容选择器
+      $('.article-content, .entry-content, .post-content, main article').find('p, h2, h3').each((i, elem) => {
         const text = $(elem).text().trim();
         if (text) {
-          content += text + '\n\n';
+          if (elem.tagName === 'h2' || elem.tagName === 'h3') {
+            contentParts.push(`### ${text}\n\n`);  // 添加标题标记
+          } else {
+            contentParts.push(`${text}\n\n`);
+          }
         }
       });
 
+      const content = contentParts.join('');
+      console.log('Microsoft 文章内容长度:', content.length);
+
       // 生成摘要
-      const summary = content.split('\n')[0];  // 使用第一段作为摘要
+      const summary = contentParts.find(p => p.length > 50)?.substring(0, 200) || '';
 
       return {
         title: item.title.trim(),
-        content: content,
+        content: this.cleanContent(content),
         summary: summary,
         url: item.link,
         publishDate: new Date(item.pubDate || item.isoDate),
@@ -484,25 +504,35 @@ class CrawlerService {
   // Google 文章处理
   async processGoogleArticle(item, source) {
     try {
+      console.log('处理 Google 文章:', item.title);
       const response = await fetch(item.link);
       const html = await response.text();
       const $ = cheerio.load(html);
       
-      // 提取内容
-      let content = '';
-      $('.post-content').find('p').each((i, elem) => {
+      // 提取内容，尝试多个可能的选择器
+      let contentParts = [];
+      
+      // 尝试不同的内容选择器
+      $('.post-content, .entry-content, article, .blog-post').find('p, h2, h3').each((i, elem) => {
         const text = $(elem).text().trim();
         if (text) {
-          content += text + '\n\n';
+          if (elem.tagName === 'h2' || elem.tagName === 'h3') {
+            contentParts.push(`### ${text}\n\n`);  // 添加标题标记
+          } else {
+            contentParts.push(`${text}\n\n`);
+          }
         }
       });
 
+      const content = contentParts.join('');
+      console.log('Google 文章内容长度:', content.length);
+
       // 生成摘要
-      const summary = content.split('\n')[0];  // 使用第一段作为摘要
+      const summary = contentParts.find(p => p.length > 50)?.substring(0, 200) || '';
 
       return {
         title: item.title.trim(),
-        content: content,
+        content: this.cleanContent(content),
         summary: summary,
         url: item.link,
         publishDate: new Date(item.pubDate || item.isoDate),
@@ -695,19 +725,29 @@ class CrawlerService {
   cleanContent(content) {
     if (!content) return '';
 
-    // 统一处理标格式
-    return content
-      .split('\n')
-      .map(line => {
-        // 处理所有可能的标题格式
-        if (line.match(/^[#\s]+/)) {
-          // 移除所有 # 和空格，然后重新添加标准格式
-          const titleText = line.replace(/^[#\s]+/, '').trim();
-          return `### ${titleText}`;
-        }
-        return line;
-      })
-      .join('\n');
+    try {
+      // 将内容按段落分割
+      const paragraphs = content
+        .split('\n\n')
+        .map(p => p.trim())
+        .filter(p => p.length > 0);
+
+      // 去除重复段落
+      const uniqueParagraphs = [...new Set(paragraphs)];
+
+      // 检查重复情况
+      console.log('内容清理:', {
+        originalParagraphs: paragraphs.length,
+        uniqueParagraphs: uniqueParagraphs.length,
+        duplicatesRemoved: paragraphs.length - uniqueParagraphs.length
+      });
+
+      // 重新组合内容
+      return uniqueParagraphs.join('\n\n');
+    } catch (error) {
+      console.error('清理内容失败:', error);
+      return content;
+    }
   }
 }
 
