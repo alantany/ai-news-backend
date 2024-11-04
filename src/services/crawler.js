@@ -97,10 +97,10 @@ class CrawlerService {
         url: url
       }));
 
-      console.log('加载 RSS 源:', this.rssSources.map(s => ({
-        name: s.name,
-        url: s.url
-      })));
+      console.log('\n加载的 RSS 源:');
+      this.rssSources.forEach(source => {
+        console.log(`- ${source.name}: ${source.url}`);
+      });
     } catch (error) {
       console.error('加载 RSS 源失败:', error);
       this.rssSources = [];
@@ -219,30 +219,46 @@ class CrawlerService {
       // 分别处理每个源
       for (const source of this.rssSources) {
         try {
-          console.log(`\n抓取源: ${source.name}`);
-          console.log('源URL:', source.url);
+          console.log(`\n开始处理源: ${source.name}`);
+          console.log(`URL: ${source.url}`);
           
           const feed = await this.parser.parseURL(source.url);
-          console.log(`源返回文章数: ${feed.items.length}`);
+          console.log(`源返回文章数: ${feed.items?.length || 0}`);
           
-          // 处理当前源的文章
+          if (!feed.items || feed.items.length === 0) {
+            console.log(`警告: ${source.name} 没有返回任何文章`);
+            continue;
+          }
+          
+          // 处理当前源的文章，限制每个源的数量
           const sourceArticles = [];
-          for (const item of feed.items.slice(0, articlesPerSource)) {
-            const processedArticle = await this.processRssItem(item, source);
-            if (processedArticle) {
-              sourceArticles.push(processedArticle);
+          const itemsToProcess = feed.items.slice(0, articlesPerSource);
+          
+          console.log(`准备处理 ${itemsToProcess.length} 篇文章，来自 ${source.name}`);
+          
+          for (const item of itemsToProcess) {
+            try {
+              const processedArticle = await this.processRssItem(item, source);
+              if (processedArticle) {
+                sourceArticles.push(processedArticle);
+              }
+            } catch (error) {
+              console.error(`处理文章失败: ${item.title}`, error);
             }
           }
 
           allArticles.push(...sourceArticles);
           console.log(`从 ${source.name} 获取到 ${sourceArticles.length} 篇文章`);
         } catch (error) {
-          console.error(`抓取失败: ${source.name}`, error);
+          console.error(`抓取源失败: ${source.name}`, error);
           continue;
         }
       }
 
-      console.log(`\n总共处理 ${allArticles.length} 篇文章`);
+      console.log('\n抓取统计:');
+      console.log(`总源数: ${this.rssSources.length}`);
+      console.log(`每源限制: ${articlesPerSource}`);
+      console.log(`总处理文章数: ${allArticles.length}`);
 
       // 保存文章
       const savedArticles = [];
@@ -513,7 +529,7 @@ class CrawlerService {
         return `[BOLD${markers.length - 1}]`;
       });
 
-      // 翻译处理后的文本
+      // 翻译处理��的文本
       const { text: translatedText } = await translate(markedText, { to: 'zh-CN' });
 
       // 还原格式标记
@@ -673,7 +689,7 @@ class CrawlerService {
       
       return fullContent;
     } catch (error) {
-      console.error('处理 arXiv 文章失败:', error.message);
+      console.error('处理 arXiv 章失败:', error.message);
       return null;
     }
   }
