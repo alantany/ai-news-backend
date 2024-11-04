@@ -289,18 +289,43 @@ class CrawlerService {
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // 提取内容时保持格式
-      let content = '';
+      // 提取内容时强制分段
+      let sections = [];
       $('.ltx_section').each((i, section) => {
-        const title = $(section).find('.ltx_title').first().text().trim();
-        const paragraphs = $(section).find('p').map((i, p) => $(p).text().trim()).get();
+        const $section = $(section);
+        const title = $section.find('.ltx_title').first().text().trim();
+        
+        // 收集段落
+        const paragraphs = [];
+        $section.find('p, .ltx_para').each((j, p) => {
+          const text = $(p).text().trim();
+          if (text) {
+            paragraphs.push(text);
+          }
+        });
         
         if (title && paragraphs.length > 0) {
-          // 使用 Markdown 格式标记标题和段落
-          content += `\n# ${title}\n\n`;  // 使用 # 标记标题
-          content += paragraphs.join('\n\n');  // 使用双换行分隔段落
-          content += '\n\n';  // 段落之间添加额外空行
+          sections.push({
+            title: title,
+            content: paragraphs
+          });
         }
+      });
+
+      // 组合内容，确保分段
+      let content = '';
+      sections.forEach(section => {
+        content += `\n### ${section.title}\n\n`;  // 使用 ### 作为标题标记
+        section.content.forEach(paragraph => {
+          content += `${paragraph}\n\n`;  // 每个段落后添加两个换行
+        });
+      });
+
+      // 打印分段信息
+      console.log('内容处理结果:', {
+        sectionsCount: sections.length,
+        totalParagraphs: sections.reduce((sum, s) => sum + s.content.length, 0),
+        contentLength: content.length
       });
 
       // 处理数学公式和引用
@@ -349,7 +374,7 @@ class CrawlerService {
 
       return {
         title: item.title.trim(),
-        content: content,
+        content: content.trim(),
         summary: summary,
         url: item.link,
         publishDate: publishDate,
