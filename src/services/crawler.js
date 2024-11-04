@@ -289,16 +289,41 @@ class CrawlerService {
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // 提取内容
+      // 提取内容时保持格式
       let content = '';
       $('.ltx_section').each((i, section) => {
         const title = $(section).find('.ltx_title').first().text().trim();
         const paragraphs = $(section).find('p').map((i, p) => $(p).text().trim()).get();
         
         if (title && paragraphs.length > 0) {
-          content += `## ${title}\n\n${paragraphs.join('\n\n')}\n\n`;
+          // 使用 Markdown 格式标记标题和段落
+          content += `\n# ${title}\n\n`;  // 使用 # 标记标题
+          content += paragraphs.join('\n\n');  // 使用双换行分隔段落
+          content += '\n\n';  // 段落之间添加额外空行
         }
       });
+
+      // 处理数学公式和引用
+      $('.ltx_equation, .ltx_cite').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text) {
+          content = content.replace(text, `**${text}**`);  // 加粗处理
+        }
+      });
+
+      // 处理重要术语
+      $('.ltx_theorem, .ltx_definition').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text) {
+          content = content.replace(text, `**${text}**`);
+        }
+      });
+
+      // 清理和格式化内容
+      content = content
+        .replace(/\n{3,}/g, '\n\n')  // 多个换行替换为两个
+        .replace(/\s+/g, ' ')        // 合并多个空格
+        .trim();
 
       // 生成摘要
       const abstract = $('.abstract').text().trim();
@@ -445,14 +470,49 @@ class CrawlerService {
     return cleanContent.substring(0, 200) + '...';
   }
 
+  // 翻译时保持格式
   async translateText(text) {
     if (!text) return '';
     
     try {
-      const { text: translatedText } = await translate(text, { to: 'zh-CN' });
-      return translatedText;
+      // 保存格式标记
+      const markers = [];
+      let markedText = text;
+      
+      // 保护标题标记
+      markedText = markedText.replace(/\n#\s+(.*?)\n/g, (match, title) => {
+        markers.push({ type: 'title', content: title });
+        return `\n[TITLE${markers.length - 1}]\n`;
+      });
+
+      // 保护加粗文本
+      markedText = markedText.replace(/\*\*(.*?)\*\*/g, (match, bold) => {
+        markers.push({ type: 'bold', content: bold });
+        return `[BOLD${markers.length - 1}]`;
+      });
+
+      // 翻译处理后的文本
+      const { text: translatedText } = await translate(markedText, { to: 'zh-CN' });
+
+      // 还原格式标记
+      let finalText = translatedText;
+      markers.forEach((marker, index) => {
+        if (marker.type === 'title') {
+          finalText = finalText.replace(
+            `[TITLE${index}]`,
+            `\n# ${marker.content}\n`
+          );
+        } else if (marker.type === 'bold') {
+          finalText = finalText.replace(
+            `[BOLD${index}]`,
+            `**${marker.content}**`
+          );
+        }
+      });
+
+      return finalText;
     } catch (error) {
-      console.error('翻译失败');
+      console.error('翻译失败:', error);
       throw error;
     }
   }
@@ -582,7 +642,7 @@ class CrawlerService {
         ...sections
       ].join('\n\n');
 
-      console.log('处��完成，内容统计:', {
+      console.log('处理完成，内容统计:', {
         hasAuthors: !!authors,
         hasAbstract: !!abstract,
         sectionsCount: sections.length,
