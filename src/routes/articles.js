@@ -30,7 +30,7 @@ router.get('/count', async (req, res) => {
     const count = await Article.countDocuments();
     res.json({ count });
   } catch (error) {
-    console.error('获取文章总数失败:', error);
+    console.error('获取文章数量失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
