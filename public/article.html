@@ -40,12 +40,21 @@
             line-height: 1.8;
             font-size: 16px;
         }
+        .article-content p {
+            margin-bottom: 20px;
+            text-align: justify;
+        }
         .article-content h3 {
             font-size: 20px;
+            font-weight: 500;
             color: #222;
-            margin: 30px 0 15px;
-            padding-left: 10px;
+            margin: 40px 0 20px;
+            padding-left: 12px;
             border-left: 4px solid #07c160;
+            line-height: 1.4;
+        }
+        .article-content h3:first-child {
+            margin-top: 0;
         }
         .loading {
             text-align: center;
@@ -65,6 +74,24 @@
     <script>
         const API_BASE = '/api';
 
+        // 处理文章内容格式
+        function formatContent(content) {
+            if (!content) return '';
+            
+            // 分割成段落
+            const paragraphs = content.split('\n').filter(p => p.trim());
+            
+            // 处理每个段落
+            return paragraphs.map(p => {
+                // 处理标题
+                if (p.startsWith('### ')) {
+                    return `<h3>${p.replace('### ', '')}</h3>`;
+                }
+                // 普通段落
+                return `<p>${p}</p>`;
+            }).join('\n');
+        }
+
         async function loadArticle() {
             try {
                 const urlParams = new URLSearchParams(window.location.search);
@@ -83,7 +110,7 @@
                         <span>来源: ${article.source}</span>
                     </div>
                     <div class="article-content">
-                        ${article.translatedContent || article.content}
+                        ${formatContent(article.translatedContent || article.content)}
                     </div>
                 `;
 
