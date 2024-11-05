@@ -368,7 +368,7 @@ router.post('/:id/translate', async (req, res) => {
       article.isTranslated = true;
       await article.save();
 
-      console.log('翻译完成��保存');
+      console.log('翻译完成保存');
       res.json({
         title: article.translatedTitle,
         content: article.translatedContent,
@@ -380,6 +380,38 @@ router.post('/:id/translate', async (req, res) => {
     }
   } catch (error) {
     console.error('翻译文章失败:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// 更新分享数
+router.post('/:id/share', async (req, res) => {
+  try {
+    console.log('收到分享请求:', req.params.id);
+    
+    const article = await Article.findOneAndUpdate(
+      { _id: req.params.id },
+      { $inc: { shares: 1 } },
+      { 
+        new: true,
+        runValidators: true
+      }
+    );
+    
+    if (!article) {
+      console.log('文章不存在');
+      return res.status(404).json({ message: '文章不存在' });
+    }
+
+    console.log('更新分享数成功，更新后的数据:', {
+      id: article._id,
+      shares: article.shares,
+      updateTime: new Date()
+    });
+    
+    res.json(article);
+  } catch (error) {
+    console.error('更新分享数失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
