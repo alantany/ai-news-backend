@@ -4,19 +4,45 @@ const Article = require('../models/Article');
 // 添加延迟函数
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// 添加重试翻译函数
+async function retryTranslate(text, retries = 3) {
+  if (!text) return { text: '' };
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      // 每次重试前添加延迟
+      if (i > 0) {
+        await delay(2000 * i);
+      }
+      return await translate(text, { to: 'zh-CN' });
+    } catch (error) {
+      console.error(`翻译失败 (尝试 ${i + 1}/${retries}):`, error.message);
+      if (i === retries - 1) {
+        // 最后一次尝试失败，返回原文
+        return { text };
+      }
+    }
+  }
+}
+
 // 翻译单篇文章
 async function translateArticle(article) {
   try {
     console.log(`开始翻译文章: ${article.title}`);
+    console.log('内容长度:', {
+      title: article.title?.length || 0,
+      content: article.content?.length || 0,
+      summary: article.summary?.length || 0
+    });
     
-    // 翻译标题、内容和摘要
+    // 使用重试机制翻译
     const [titleResult, contentResult, summaryResult] = await Promise.all([
-      translate(article.title || '', { to: 'zh-CN' }),
-      translate(article.content || '', { to: 'zh-CN' }),
-      translate(article.summary || '', { to: 'zh-CN' })
+      retryTranslate(article.title || ''),
+      retryTranslate(article.content || ''),
+      retryTranslate(article.summary || '')
     ]);
 
-    // 立即更新数据库
+    // 更新文章
     const updatedArticle = await Article.findByIdAndUpdate(
       article._id,
       {
@@ -55,12 +81,12 @@ async function translateUntranslatedArticles() {
         { translatedContent: null },
         { translatedSummary: null }
       ]
-    }).sort({ publishDate: -1 });  // 按发布日期排序
+    }).sort({ publishDate: -1 });
     
     console.log(`找到 ${untranslatedArticles.length} 篇需要翻译的文章`);
 
-    // 分批处理，每批15篇
-    const batchSize = 15;
+    // 分批处理，每批5篇
+    const batchSize = 5;
     let successCount = 0;
     let failCount = 0;
 
