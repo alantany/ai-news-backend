@@ -1,17 +1,16 @@
+# arXiv RAG Papers
+http://export.arxiv.org/api/query?search_query=(all:RAG+OR+all:"Retrieval Augmented Generation"+OR+all:LLM+OR+all:"Large Language Model"+OR+all:Agent+OR+all:"Multi Agent"+OR+all:GraphRAG+OR+all:"Knowledge Graph"+OR+all:"Prompt Engineering"+OR+all:"Chain of Thought")&sortBy=submittedDate&sortOrder=descending
+
 # Microsoft AI Blog
 https://blogs.microsoft.com/ai/feed/
 
 # Google AI Blog
 https://blog.research.google/feeds/posts/default
 
-# arXiv RAG Papers - 获取一个月内的文章
-http://export.arxiv.org/api/query?search_query=all:"Retrieval+Augmented+Generation"+OR+all:RAG&sortBy=submittedDate&sortOrder=descending&start=0&max_results=100&from=-1m
-
-
-
 # 删除文档：curl -X POST https://rss.kids-coder.cn/api/admin/clear-articles
 # 触发抓取：curl -X POST https://rss.kids-coder.cn/api/admin/crawl
 # 检查文章：node src/scripts/checkArticles.js
+# 抓取arxiv：node src/scripts/fetchArxiv.js 2024-10-29
 
 
 
