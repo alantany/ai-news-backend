@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文章详情 - AI 新闻聚合</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .back {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #07c160;
+            text-decoration: none;
+        }
+        .article-title {
+            font-size: 24px;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .article-meta {
+            color: #999;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+        .article-content {
+            color: #333;
+            line-height: 1.8;
+            font-size: 16px;
+        }
+        .article-content h3 {
+            font-size: 20px;
+            color: #222;
+            margin: 30px 0 15px;
+            padding-left: 10px;
+            border-left: 4px solid #07c160;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back">← 返回列表</a>
+        <div id="article">
+            <div id="loading" class="loading">加载中...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        async function loadArticle() {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const id = urlParams.get('id');
+                
+                const response = await fetch(`${API_BASE}/articles/${id}`);
+                const article = await response.json();
+                
+                document.title = `${article.translatedTitle || article.title} - AI 新闻聚合`;
+                
+                const container = document.getElementById('article');
+                container.innerHTML = `
+                    <h1 class="article-title">${article.translatedTitle || article.title}</h1>
+                    <div class="article-meta">
+                        <span>${new Date(article.publishDate).toLocaleDateString()}</span>
+                        <span>来源: ${article.source}</span>
+                    </div>
+                    <div class="article-content">
+                        ${article.translatedContent || article.content}
+                    </div>
+                `;
+
+                // 更新阅读数
+                fetch(`${API_BASE}/articles/${id}/read`, { method: 'POST' });
+            } catch (error) {
+                console.error('加载文章失败:', error);
+                document.getElementById('loading').textContent = '加载失败';
+            }
+        }
+
+        // 页面加载时获取文章详情
+        loadArticle();
+    </script>
+</body>
+</html> 

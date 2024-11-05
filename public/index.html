@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 新闻聚合</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: 500;
+            color: #333;
+        }
+        .count {
+            color: #999;
+        }
+        .article-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .article-title {
+            font-size: 18px;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 10px;
+            text-decoration: none;
+        }
+        .article-title:hover {
+            color: #07c160;
+        }
+        .article-summary {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 10px 0;
+        }
+        .article-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #999;
+        }
+        .article-stats {
+            display: flex;
+            gap: 15px;
+        }
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+        .stat-icon {
+            width: 16px;
+            height: 16px;
+            opacity: 0.6;
+        }
+        .stat-icon.active {
+            opacity: 1;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="title">AI 新闻聚合</h1>
+        <span class="count" id="totalCount">共 0 篇</span>
+    </div>
+    
+    <div id="articles"></div>
+    
+    <div id="loading" class="loading">加载中...</div>
+
+    <script>
+        const API_BASE = '/api';
+
+        async function loadArticles() {
+            try {
+                const response = await fetch(`${API_BASE}/articles`);
+                const articles = await response.json();
+                
+                document.getElementById('totalCount').textContent = `共 ${articles.length} 篇`;
+                document.getElementById('loading').style.display = 'none';
+                
+                const container = document.getElementById('articles');
+                articles.forEach(article => {
+                    const card = document.createElement('div');
+                    card.className = 'article-card';
+                    card.innerHTML = `
+                        <a href="/article.html?id=${article._id}" class="article-title">
+                            ${article.translatedTitle || article.title}
+                        </a>
+                        <div class="article-summary">
+                            ${article.translatedSummary || article.summary || ''}
+                        </div>
+                        <div class="article-footer">
+                            <span>${new Date(article.publishDate).toLocaleDateString()}</span>
+                            <div class="article-stats">
+                                <div class="stat-item" onclick="handleLike('${article._id}', this)">
+                                    <img src="/assets/icons/like.svg" class="stat-icon ${article.hasLiked ? 'active' : ''}" />
+                                    <span>${article.likes || 0}</span>
+                                </div>
+                                <div class="stat-item">
+                                    <img src="/assets/icons/read.svg" class="stat-icon" />
+                                    <span>${article.reads || 0}</span>
+                                </div>
+                                <div class="stat-item" onclick="handleStar('${article._id}', this)">
+                                    <img src="/assets/icons/star.svg" class="stat-icon ${article.hasStarred ? 'active' : ''}" />
+                                    <span>${article.stars || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error('加载文章失败:', error);
+                document.getElementById('loading').textContent = '加载失败';
+            }
+        }
+
+        async function handleLike(id, element) {
+            try {
+                const response = await fetch(`${API_BASE}/articles/${id}/like`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    element.querySelector('span').textContent = data.likes;
+                    element.querySelector('.stat-icon').classList.add('active');
+                }
+            } catch (error) {
+                console.error('点赞失败:', error);
+            }
+        }
+
+        async function handleStar(id, element) {
+            try {
+                const response = await fetch(`${API_BASE}/articles/${id}/star`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    element.querySelector('span').textContent = data.stars;
+                    element.querySelector('.stat-icon').classList.add('active');
+                }
+            } catch (error) {
+                console.error('收藏失败:', error);
+            }
+        }
+
+        // 页面加载时获取文章列表
+        loadArticles();
+    </script>
+</body>
+</html> 
