@@ -10,17 +10,35 @@ async function retryTranslate(text, retries = 3) {
   
   for (let i = 0; i < retries; i++) {
     try {
-      // 每次重试前添加延迟
-      if (i > 0) {
-        await delay(2000 * i);
+      // 检查文本长度
+      console.log('准备翻译文本:', {
+        length: text.length,
+        preview: text.substring(0, 100) + '...'
+      });
+
+      // 如果文本太长，分段翻译
+      if (text.length > 5000) {
+        const parts = text.match(/.{1,5000}/g) || [];
+        const translatedParts = await Promise.all(
+          parts.map(part => translate(part, { to: 'zh-CN' }))
+        );
+        return {
+          text: translatedParts.map(result => result.text).join('')
+        };
       }
+
       return await translate(text, { to: 'zh-CN' });
     } catch (error) {
-      console.error(`翻译失败 (尝试 ${i + 1}/${retries}):`, error.message);
+      console.error(`翻译失败 (尝试 ${i + 1}/${retries}):`, {
+        error: error.message,
+        response: error.response,
+        stack: error.stack
+      });
+      
       if (i === retries - 1) {
-        // 最后一次尝试失败，返回原文
-        return { text };
+        return { text }; // 返回原文
       }
+      await delay(2000 * (i + 1));
     }
   }
 }
