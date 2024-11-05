@@ -73,13 +73,25 @@ router.get('/', async (req, res) => {
     console.log('获取文章列表请求');
     const articles = await Article.find({})
       .sort({ publishDate: -1 })
-      .select('title translatedTitle source publishDate summary translatedSummary');
+      .select('title translatedTitle content translatedContent summary translatedSummary source publishDate likes reads stars shares');
     
-    console.log('返回文章示例:', {
-      title: articles[0]?.title,
-      hasSummary: !!articles[0]?.translatedSummary,
-      summaryLength: articles[0]?.translatedSummary?.length || 0
-    });
+    if (articles.length > 0) {
+      console.log('第一篇文章统计数据:', {
+        title: articles[0].title,
+        likes: articles[0].likes,
+        reads: articles[0].reads,
+        stars: articles[0].stars,
+        shares: articles[0].shares
+      });
+    }
+
+    const stats = {
+      totalLikes: articles.reduce((sum, a) => sum + (a.likes || 0), 0),
+      totalReads: articles.reduce((sum, a) => sum + (a.reads || 0), 0),
+      totalStars: articles.reduce((sum, a) => sum + (a.stars || 0), 0),
+      totalShares: articles.reduce((sum, a) => sum + (a.shares || 0), 0)
+    };
+    console.log('总统计数据:', stats);
     
     res.json(articles);
   } catch (error) {
@@ -91,15 +103,32 @@ router.get('/', async (req, res) => {
 // 点赞文章
 router.post('/:id/like', async (req, res) => {
   try {
-    const id = req.params.id;
-    statsCache.likes.set(id, (statsCache.likes.get(id) || 0) + 1);
+    console.log('收到点赞请求:', req.params.id);
     
-    // 获取当前统计数据
-    const article = await Article.findById(id);
-    const likes = (article.likes || 0) + (statsCache.likes.get(id) || 0);
+    // 使用 findOneAndUpdate 确保更新成功
+    const article = await Article.findOneAndUpdate(
+      { _id: req.params.id },
+      { $inc: { likes: 1 } },
+      { 
+        new: true,  // 返回更新后的文档
+        runValidators: true  // 运行验证
+      }
+    );
     
-    res.json({ likes });
+    if (!article) {
+      console.log('文章不存在');
+      return res.status(404).json({ message: '文章不存在' });
+    }
+
+    console.log('点赞成功，更新后的数据:', {
+      id: article._id,
+      likes: article.likes,
+      updateTime: new Date()
+    });
+    
+    res.json(article);
   } catch (error) {
+    console.error('点赞失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -107,15 +136,31 @@ router.post('/:id/like', async (req, res) => {
 // 收藏文章
 router.post('/:id/star', async (req, res) => {
   try {
-    const id = req.params.id;
-    statsCache.stars.set(id, (statsCache.stars.get(id) || 0) + 1);
+    console.log('收到收藏请求:', req.params.id);
     
-    // 获取当前统计数据
-    const article = await Article.findById(id);
-    const stars = (article.stars || 0) + (statsCache.stars.get(id) || 0);
+    const article = await Article.findOneAndUpdate(
+      { _id: req.params.id },
+      { $inc: { stars: 1 } },
+      { 
+        new: true,
+        runValidators: true
+      }
+    );
     
-    res.json({ stars });
+    if (!article) {
+      console.log('文章不存在');
+      return res.status(404).json({ message: '文章不存在' });
+    }
+
+    console.log('收藏成功，更新后的数据:', {
+      id: article._id,
+      stars: article.stars,
+      updateTime: new Date()
+    });
+    
+    res.json(article);
   } catch (error) {
+    console.error('收藏失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -123,15 +168,31 @@ router.post('/:id/star', async (req, res) => {
 // 更新阅读数
 router.post('/:id/read', async (req, res) => {
   try {
-    const id = req.params.id;
-    statsCache.reads.set(id, (statsCache.reads.get(id) || 0) + 1);
+    console.log('收到阅读请求:', req.params.id);
     
-    // 获取当前统计数据
-    const article = await Article.findById(id);
-    const reads = (article.reads || 0) + (statsCache.reads.get(id) || 0);
+    const article = await Article.findOneAndUpdate(
+      { _id: req.params.id },
+      { $inc: { reads: 1 } },
+      { 
+        new: true,
+        runValidators: true
+      }
+    );
     
-    res.json({ reads });
+    if (!article) {
+      console.log('文章不存在');
+      return res.status(404).json({ message: '文章不存在' });
+    }
+
+    console.log('更新阅读数成功，更新后的数据:', {
+      id: article._id,
+      reads: article.reads,
+      updateTime: new Date()
+    });
+    
+    res.json(article);
   } catch (error) {
+    console.error('更新阅读数失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -307,7 +368,7 @@ router.post('/:id/translate', async (req, res) => {
       article.isTranslated = true;
       await article.save();
 
-      console.log('翻译完成并保存');
+      console.log('翻译完成��保存');
       res.json({
         title: article.translatedTitle,
         content: article.translatedContent,
