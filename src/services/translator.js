@@ -7,9 +7,9 @@ async function retryTranslate(text, retries = 3) {
   if (!text) return { text: '' };
   
   const cleanText = text
-    .replace(/\n\s+/g, ' ')  // 替换换行+空格为单个空格
-    .replace(/\s+/g, ' ')    // 替换多个空格为单个空格
-    .trim();                 // 去除首尾空格
+    .replace(/\n\s+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   
   for (let i = 0; i < retries; i++) {
     try {
@@ -31,6 +31,14 @@ async function retryTranslate(text, retries = 3) {
         throw new Error('翻译API返回结果为空');
       }
       
+      if (result.text === cleanText) {
+        throw new Error('翻译结果与原文相同');
+      }
+      
+      if (!/[\u4e00-\u9fa5]/.test(result.text)) {
+        throw new Error('翻译结果不包含中文字符');
+      }
+      
       console.log('[translator] 翻译成功:', {
         原文前30字符: cleanText.substring(0, 30),
         译文前30字符: result.text.substring(0, 30)
@@ -42,13 +50,11 @@ async function retryTranslate(text, retries = 3) {
         尝试次数: `${i + 1}/${retries}`,
         错误类型: error.constructor.name,
         错误信息: error.message,
-        原文前50字符: text.substring(0, 50),
-        清理后前50字符: cleanText.substring(0, 50),
-        API响应: error.response || '无响应信息'
+        原文前50字符: text.substring(0, 50)
       });
       
       if (i === retries - 1) {
-        throw new Error(`翻译失败: ${error.message}`);
+        throw error;
       }
     }
   }
@@ -59,16 +65,35 @@ async function translateUntranslatedArticles() {
     console.log('\n============= 开始翻译未翻译文章 =============');
     const startTime = new Date();
     
+    // 先获取总文章数
+    const totalArticles = await Article.countDocuments();
+    const translatedArticles = await Article.countDocuments({ isTranslated: true });
+    
+    console.log('文章统计:', {
+      总文章数: totalArticles,
+      已翻译: translatedArticles,
+      未翻译: totalArticles - translatedArticles
+    });
+    
+    // 查找未翻译的文章
     const untranslatedArticles = await Article.find({
       $or: [
-        { isTranslated: { $ne: true } },  // 未标记为已翻译
-        { isTranslated: { $exists: false } },  // 或没有 isTranslated 字段
-        { translatedTitle: null },  // 或标题翻译为空
-        { translatedTitle: { $exists: false } }  // 或没有标题翻译字段
+        { isTranslated: { $ne: true } },
+        { isTranslated: { $exists: false } },
+        { translatedTitle: null },
+        { translatedTitle: { $exists: false } }
       ]
     }).sort({ publishDate: -1 });
     
-    console.log(`找到 ${untranslatedArticles.length} 篇需要翻译的文章`);
+    console.log('查询结果:', {
+      查询条件: '未翻译或标题未翻译',
+      找到文章数: untranslatedArticles.length,
+      最新文章: untranslatedArticles[0] ? {
+        标题: untranslatedArticles[0].title,
+        发布时间: untranslatedArticles[0].publishDate,
+        来源: untranslatedArticles[0].source
+      } : '无'
+    });
 
     let successCount = 0;
     let failCount = 0;
