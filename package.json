@@ -15,7 +15,6 @@
     "express": "^4.17.1",
     "md5": "^2.3.0",
     "mongoose": "^6.0.0",
-    "node-cache": "^5.1.2",
     "node-cron": "^3.0.2",
     "node-fetch": "^2.6.1",
     "openai": "^4.0.0",

@@ -5,6 +5,104 @@ const Article = require('../models/Article');
 require('dotenv').config();
 
 class ArxivFetcher {
+  constructor() {
+    // 定义默认关键词列表
+    this.defaultKeywords = [
+      'RAG',
+      'Retrieval Augmented Generation',
+      'LLM',
+      'Large Language Model',
+      'Agent',
+      'Multi Agent',
+      'GraphRAG',
+      'Knowledge Graph',
+      'Prompt Engineering',
+      'Chain of Thought'
+    ];
+  }
+
+  buildSearchQuery() {
+    // 使用默认关键词构建查询
+    const keywordQueries = this.defaultKeywords.map(keyword => {
+      // 处理复合词
+      if (keyword.includes(' ')) {
+        return `all:"${keyword}"`;
+      }
+      return `all:${keyword}`;
+    });
+    
+    console.log('使用关键词:', this.defaultKeywords);
+    return keywordQueries.join('+OR+');
+  }
+
+  async fetch(startDate, endDate) {
+    try {
+      await mongoose.connect(process.env.MONGODB_URI);
+      console.log('\n============= 开始抓取文章 =============');
+      console.log('数据库连接成功');
+
+      // 构建查询URL
+      const searchQuery = this.buildSearchQuery();
+      
+      // 修改日期格式为 YYYYMMDDHHMMSS
+      const formatDate = (dateStr) => {
+        const date = new Date(dateStr);
+        return date.toISOString().replace(/[-T:Z]/g, '').substring(0, 14);
+      };
+
+      const dateQuery = startDate ? 
+        `(${searchQuery})+AND+lastUpdatedDate:[${formatDate(startDate)}+TO+${formatDate(endDate || startDate)}]` : 
+        searchQuery;
+      
+      const url = `http://export.arxiv.org/api/query?search_query=${dateQuery}&sortBy=lastUpdatedDate&sortOrder=descending&max_results=100`;
+      
+      console.log('搜索查询:', dateQuery);
+      console.log('请求URL:', url);
+
+      const response = await fetch(url);
+      const data = await response.text();
+
+      // 解析XML
+      const feed = await new Promise((resolve) => {
+        require('xml2js').parseString(data, (err, result) => {
+          resolve(result?.feed?.entry || []);
+        });
+      });
+
+      console.log(`找到 ${feed.length} 篇文章`);
+
+      // 处理每篇文章
+      let savedCount = 0;
+      for (const item of feed) {
+        const processedArticle = await this.processRssItem(item);
+        if (processedArticle) {
+          try {
+            // 检查文章是否已存在
+            const existingArticle = await Article.findOne({ url: processedArticle.url });
+            if (!existingArticle) {
+              await Article.create(processedArticle);
+              console.log('保存成功:', processedArticle.title);
+              savedCount++;
+            } else {
+              console.log('文章已存在，跳过:', processedArticle.title);
+            }
+          } catch (error) {
+            console.error('保存失败:', error);
+          }
+        }
+        // 添加延迟避免请求过快
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      console.log(`\n抓取完成，共保存 ${savedCount} 篇新文章`);
+      await mongoose.disconnect();
+
+    } catch (error) {
+      console.error('抓取失败:', error);
+      await mongoose.disconnect();
+    }
+  }
+
   async processRssItem(item) {
     try {
       const arxivId = item.id[0].match(/\d{4}\.\d{5}/)?.[0];
@@ -62,64 +160,6 @@ class ArxivFetcher {
     } catch (error) {
       console.error('处理文章失败:', error);
       return null;
-    }
-  }
-
-  async fetch(startDate, endDate) {
-    try {
-      await mongoose.connect(process.env.MONGODB_URI);
-      console.log('\n============= 开始抓取文章 =============');
-      console.log('数据库连接成功');
-
-      // 构建查询URL
-      const query = 'all:"Retrieval+Augmented+Generation"+OR+all:RAG';
-      const dateQuery = startDate ? 
-        `+AND+submittedDate:[${startDate}+TO+${endDate || startDate}]` : '';
-      
-      const url = `http://export.arxiv.org/api/query?search_query=${query}${dateQuery}&sortBy=submittedDate&sortOrder=descending&max_results=100`;
-      
-      console.log('请求URL:', url);
-      const response = await fetch(url);
-      const data = await response.text();
-
-      // 解析XML
-      const feed = await new Promise((resolve) => {
-        require('xml2js').parseString(data, (err, result) => {
-          resolve(result?.feed?.entry || []);
-        });
-      });
-
-      console.log(`找到 ${feed.length} 篇文章`);
-
-      // 处理每篇文章
-      let savedCount = 0;
-      for (const item of feed) {
-        const processedArticle = await this.processRssItem(item);
-        if (processedArticle) {
-          try {
-            // 检查文章是否已存在
-            const existingArticle = await Article.findOne({ url: processedArticle.url });
-            if (!existingArticle) {
-              await Article.create(processedArticle);
-              console.log('保存成功:', processedArticle.title);
-              savedCount++;
-            } else {
-              console.log('文章已存在，跳过:', processedArticle.title);
-            }
-          } catch (error) {
-            console.error('保存失败:', error);
-          }
-        }
-        // 添加延迟避免请求过快
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
-      console.log(`\n抓取完成，共保存 ${savedCount} 篇新文章`);
-      await mongoose.disconnect();
-
-    } catch (error) {
-      console.error('抓取失败:', error);
-      await mongoose.disconnect();
     }
   }
 }

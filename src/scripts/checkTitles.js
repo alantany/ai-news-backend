@@ -34,4 +34,4 @@ async function checkTitles() {
   }
 }
 
-checkTitles(); 
+checkTitles();

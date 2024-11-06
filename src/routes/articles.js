@@ -67,33 +67,34 @@ router.get('/count', async (req, res) => {
   }
 });
 
-// 获取文章列表
+// 添加文章索引
 router.get('/', async (req, res) => {
   try {
-    console.log('获取文章列表请求');
-    const articles = await Article.find({})
-      .sort({ publishDate: -1 })
-      .select('title translatedTitle content translatedContent summary translatedSummary source publishDate likes reads stars shares');
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
     
-    if (articles.length > 0) {
-      console.log('第一篇文章统计数据:', {
-        title: articles[0].title,
-        likes: articles[0].likes,
-        reads: articles[0].reads,
-        stars: articles[0].stars,
-        shares: articles[0].shares
-      });
-    }
-
-    const stats = {
-      totalLikes: articles.reduce((sum, a) => sum + (a.likes || 0), 0),
-      totalReads: articles.reduce((sum, a) => sum + (a.reads || 0), 0),
-      totalStars: articles.reduce((sum, a) => sum + (a.stars || 0), 0),
-      totalShares: articles.reduce((sum, a) => sum + (a.shares || 0), 0)
-    };
-    console.log('总统计数据:', stats);
+    // 只返回必要的字段
+    const articles = await Article.find(
+      {}, 
+      'title translatedTitle summary translatedSummary publishDate source isTranslated'
+    )
+    .sort({ publishDate: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean(); // 使用 lean() 返回普通 JS 对象，提升性能
     
-    res.json(articles);
+    const total = await Article.countDocuments();
+    
+    res.json({
+      articles,
+      pagination: {
+        current: page,
+        total: Math.ceil(total / limit),
+        pageSize: limit,
+        totalItems: total
+      }
+    });
   } catch (error) {
     console.error('获取文章列表失败:', error);
     res.status(500).json({ message: error.message });

@@ -440,7 +440,7 @@ class CrawlerService {
       const html = await response.text();
       const $ = cheerio.load(html);
       
-      // 提取��容，尝试多个可能的选择器
+      // 提取容，尝试多个可能的选择器
       let contentParts = [];
       
       // 尝试不同的内容选择器

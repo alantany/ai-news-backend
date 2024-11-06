@@ -19,4 +19,23 @@ const articleSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.model('Article', articleSchema); 
+// 添加索引
+articleSchema.index({ publishDate: -1 }); // 发布日期索引
+articleSchema.index({ isTranslated: 1 }); // 翻译状态索引
+articleSchema.index({ title: 'text', translatedTitle: 'text' }); // 文本搜索索引
+
+const Article = mongoose.model('Article', articleSchema);
+
+// 创建索引
+async function createIndexes() {
+  try {
+    await Article.createIndexes();
+    console.log('文章索引创建成功');
+  } catch (error) {
+    console.error('创建索引失败:', error);
+  }
+}
+
+createIndexes();
+
+module.exports = Article; 

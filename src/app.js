@@ -8,6 +8,7 @@ const Article = require('./models/Article');
 const { translate } = require('@vitalets/google-translate-api');
 const path = require('path');
 require('dotenv').config();
+const { cleanOldArticles } = require('./services/cleaner');
 
 const app = express();
 
@@ -195,7 +196,7 @@ async function updateCrawlJob() {
 
 // 监听设置变化
 Setting.watch().on('change', async () => {
-  console.log('检测到设置变化，更新定时任务');
+  console.log('检测到设置变���，更新定时任务');
   await updateCrawlJob();
 });
 
@@ -205,6 +206,17 @@ connectDB().then(async () => {
   await updateCrawlJob();
 }).catch(error => {
   console.error('数据库连接失败:', error);
+});
+
+// 每周日凌晨2点执行清理
+cron.schedule('0 2 * * 0', async () => {
+  console.log('开始清理旧文章...');
+  try {
+    const count = await cleanOldArticles();
+    console.log(`文章清理完成，共清理 ${count} 篇`);
+  } catch (error) {
+    console.error('清理任务失败:', error);
+  }
 });
 
 // API路由
