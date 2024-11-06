@@ -72,106 +72,72 @@ async function translateUntranslatedArticles() {
     
     console.log(`找到 ${untranslatedArticles.length} 篇需要翻译的文章`);
 
-    const batchSize = 5;
     let successCount = 0;
     let failCount = 0;
-    let translatedTitles = []; // 记录已翻译的文章标题
+    let translatedTitles = [];
 
-    for (let i = 0; i < untranslatedArticles.length; i += batchSize) {
-      const batch = untranslatedArticles.slice(i, i + batchSize);
-      console.log(`\n开始处理第 ${i + 1} 到 ${i + batch.length} 篇文章`);
-
-      for (const article of batch) {
-        try {
-          console.log(`\n[文章 ${successCount + failCount + 1}] 开始翻译:`, article.title);
-          
-          const [titleResult, contentResult, summaryResult] = await Promise.all([
-            retryTranslate(article.title || ''),
-            retryTranslate(article.content || ''),
-            retryTranslate(article.summary || '')
-          ]);
-
-          if (!titleResult.text || !contentResult.text || !summaryResult.text) {
-            throw new Error('翻译结果为空');
-          }
-
-          console.log('翻译完成，准备保存...');
-          
-          const updatedArticle = await Article.findByIdAndUpdate(
-            article._id,
-            {
-              $set: {
-                translatedTitle: titleResult.text,
-                translatedContent: contentResult.text,
-                translatedSummary: summaryResult.text,
-                isTranslated: true,
-                lastTranslated: new Date()
-              }
-            },
-            { new: true }
-          );
-
-          successCount++;
-          translatedTitles.push(titleResult.text); // 记录翻译后的标题
-          console.log(`当前进度: 成功 ${successCount} 篇，失败 ${failCount} 篇`);
-          
-          await delay(3000);
-        } catch (error) {
-          console.error(`翻译文章失败: ${article.title}`, {
-            error: error.message,
-            time: new Date().toISOString()
-          });
-          failCount++;
-          
-          // 打印翻译统计信息并退出
-          const endTime = new Date();
-          const duration = (endTime - startTime) / 1000; // 转换为秒
-          
-          console.log('\n============= 翻译任务异常终止 =============');
-          console.log('统计信息:');
-          console.log(`总耗时: ${duration.toFixed(1)} 秒`);
-          console.log(`成功翻译: ${successCount} 篇`);
-          console.log(`失败数量: ${failCount} 篇`);
-          if (translatedTitles.length > 0) {
-            console.log('\n已翻译的文章:');
-            translatedTitles.forEach((title, index) => {
-              console.log(`${index + 1}. ${title}`);
-            });
-          }
-          console.log('==========================================');
-          
-          return {
-            success: successCount,
-            failed: failCount,
-            error: error.message,
-            duration: duration.toFixed(1),
-            translatedArticles: translatedTitles
-          };
+    for (const article of untranslatedArticles) {
+      try {
+        console.log(`\n[文章 ${successCount + failCount + 1}] 开始翻译:`, article.title);
+        
+        // 分别翻译并检查每个部分
+        const titleResult = await retryTranslate(article.title || '');
+        if (!titleResult.text) {
+          throw new Error('标题翻译为空');
         }
-      }
 
-      if (i + batchSize < untranslatedArticles.length) {
-        console.log('\n等待下一批处理...');
-        await delay(10000);
+        const contentResult = await retryTranslate(article.content || '');
+        if (!contentResult.text) {
+          throw new Error('内容翻译为空');
+        }
+
+        const summaryResult = await retryTranslate(article.summary || '');
+        if (!summaryResult.text) {
+          throw new Error('摘要翻译为空');
+        }
+
+        // 更新文章
+        const updatedArticle = await Article.findByIdAndUpdate(
+          article._id,
+          {
+            $set: {
+              translatedTitle: titleResult.text,
+              translatedContent: contentResult.text,
+              translatedSummary: summaryResult.text,
+              isTranslated: true,
+              lastTranslated: new Date()
+            }
+          },
+          { new: true }
+        );
+
+        successCount++;
+        translatedTitles.push(titleResult.text);
+        console.log(`[translator] 文章翻译完成 (${successCount}/${untranslatedArticles.length})`);
+        
+        await delay(3000);
+      } catch (error) {
+        console.error(`[translator] 文章翻译失败:`, {
+          标题: article.title,
+          错误: error.message
+        });
+        failCount++;
+        return {
+          success: successCount,
+          failed: failCount,
+          error: error.message,
+          translatedArticles: translatedTitles
+        };
       }
     }
 
-    // 打印完成统计信息
     const endTime = new Date();
     const duration = (endTime - startTime) / 1000;
     
     console.log('\n============= 翻译任务完成 =============');
-    console.log('统计信息:');
     console.log(`总耗时: ${duration.toFixed(1)} 秒`);
-    console.log(`成功翻译: ${successCount} 篇`);
-    console.log(`失败数量: ${failCount} 篇`);
-    if (translatedTitles.length > 0) {
-      console.log('\n已翻译的文章:');
-      translatedTitles.forEach((title, index) => {
-        console.log(`${index + 1}. ${title}`);
-      });
-    }
-    console.log('==========================================');
+    console.log(`成功: ${successCount} 篇`);
+    console.log(`失败: ${failCount} 篇`);
 
     return {
       success: successCount,
@@ -179,14 +145,12 @@ async function translateUntranslatedArticles() {
       duration: duration.toFixed(1),
       translatedArticles: translatedTitles
     };
-
   } catch (error) {
-    console.error('翻译过程失败:', error);
+    console.error('[translator] 翻译过程失败:', error);
     return {
       success: 0,
-      failed: 0,
+      failed: 1,
       error: error.message,
-      duration: 0,
       translatedArticles: []
     };
   }
