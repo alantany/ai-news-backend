@@ -125,4 +125,33 @@ router.post('/clear-articles', async (req, res) => {
   }
 });
 
+// 添加一个调试接口
+router.get('/debug/articles', async (req, res) => {
+  try {
+    // 获取最近10篇文章的关键信息
+    const recentArticles = await Article.find({})
+      .select('title translatedTitle publishDate isTranslated')
+      .sort({ publishDate: -1 })
+      .limit(10)
+      .lean();
+      
+    // 获取统计信息
+    const stats = {
+      total: await Article.countDocuments(),
+      translated: await Article.countDocuments({ isTranslated: true }),
+      untranslated: await Article.countDocuments({ isTranslated: false }),
+      nullTitle: await Article.countDocuments({ title: null }),
+      nullTranslatedTitle: await Article.countDocuments({ translatedTitle: null })
+    };
+    
+    res.json({
+      stats,
+      recentArticles
+    });
+  } catch (error) {
+    console.error('获取调试信息失败:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router; 

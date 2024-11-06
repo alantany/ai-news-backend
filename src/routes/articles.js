@@ -74,17 +74,45 @@ router.get('/', async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
     
-    // 只返回必要的字段
+    console.log('[ai-news-backend] GET /api/articles 查询参数:', { page, limit, skip });
+    
+    const query = { 
+      isTranslated: true
+      // 暂时注释掉其他条件，看看是否有文章返回
+      // translatedTitle: { $exists: true, $ne: null },
+      // translatedSummary: { $exists: true, $ne: null }
+    };
+    
     const articles = await Article.find(
-      {}, 
+      query, 
       'title translatedTitle summary translatedSummary publishDate source isTranslated'
     )
     .sort({ publishDate: -1 })
     .skip(skip)
     .limit(limit)
-    .lean(); // 使用 lean() 返回普通 JS 对象，提升性能
+    .lean();
     
-    const total = await Article.countDocuments();
+    console.log('[ai-news-backend] 查询结果详情:', {
+      查询条件: query,
+      返回文章数: articles.length,
+      分页信息: { page, limit, skip },
+      文章列表: articles.map(a => ({
+        id: a._id,
+        title: a.title,
+        translatedTitle: a.translatedTitle,
+        hasTranslatedTitle: !!a.translatedTitle,
+        hasTranslatedSummary: !!a.translatedSummary,
+        publishDate: a.publishDate,
+        source: a.source
+      }))
+    });
+    
+    const total = await Article.countDocuments(query);
+    console.log('[ai-news-backend] 统计信息:', {
+      总文章数: total,
+      当前页文章数: articles.length,
+      总页数: Math.ceil(total / limit)
+    });
     
     res.json({
       articles,
@@ -96,7 +124,7 @@ router.get('/', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('获取文章列表失败:', error);
+    console.error('[ai-news-backend] 获取文章列表失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -104,7 +132,7 @@ router.get('/', async (req, res) => {
 // 点赞文章
 router.post('/:id/like', async (req, res) => {
   try {
-    console.log('收到点赞请求:', req.params.id);
+    console.log('[ai-news-backend] POST /api/articles/:id/like 收到点赞请求:', req.params.id);
     
     // 使用 findOneAndUpdate 确保更新成功
     const article = await Article.findOneAndUpdate(
@@ -129,7 +157,7 @@ router.post('/:id/like', async (req, res) => {
     
     res.json(article);
   } catch (error) {
-    console.error('点赞失败:', error);
+    console.error('[ai-news-backend] 点赞失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
