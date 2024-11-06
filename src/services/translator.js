@@ -11,52 +11,52 @@ async function retryTranslate(text, retries = 3) {
     .replace(/\s+/g, ' ')
     .trim();
   
-  for (let i = 0; i < retries; i++) {
-    try {
-      if (i > 0) {
-        await delay(2000 * i);
-      }
-      
-      if (!cleanText) {
-        console.error('[translator] 清理后文本为空:', {
-          原文长度: text.length,
-          原文前30字符: text.substring(0, 30)
-        });
-        return { text: '' };
-      }
-      
-      const result = await translate(cleanText, { to: 'zh-CN' });
-      
-      if (!result || !result.text) {
-        throw new Error('翻译API返回结果为空');
-      }
-      
-      if (result.text === cleanText) {
-        throw new Error('翻译结果与原文相同');
-      }
-      
-      if (!/[\u4e00-\u9fa5]/.test(result.text)) {
-        throw new Error('翻译结果不包含中文字符');
-      }
-      
-      console.log('[translator] 翻译成功:', {
-        原文前30字符: cleanText.substring(0, 30),
-        译文前30字符: result.text.substring(0, 30)
+  try {
+    if (!cleanText) {
+      console.error('[translator] 清理后文本为空:', {
+        原文长度: text.length,
+        原文前30字符: text.substring(0, 30)
       });
-      
-      return result;
-    } catch (error) {
-      console.error('[translator] 翻译失败:', {
-        尝试次数: `${i + 1}/${retries}`,
-        错误类型: error.constructor.name,
-        错误信息: error.message,
-        原文前50字符: text.substring(0, 50)
-      });
-      
-      if (i === retries - 1) {
-        throw error;
-      }
+      return { text: '' };
     }
+    
+    const result = await translate(cleanText, { to: 'zh-CN' });
+    
+    if (!result || !result.text) {
+      throw new Error('翻译API返回结果为空');
+    }
+    
+    if (result.text === cleanText) {
+      throw new Error('翻译结果与原文相同');
+    }
+    
+    if (!/[\u4e00-\u9fa5]/.test(result.text)) {
+      throw new Error('翻译结果不包含中文字符');
+    }
+    
+    console.log('[translator] 翻译成功:', {
+      原文前30字符: cleanText.substring(0, 30),
+      译文前30字符: result.text.substring(0, 30)
+    });
+    
+    return result;
+  } catch (error) {
+    // 如果是请求过多错误，直接抛出，不重试
+    if (error.constructor.name === 'TooManyRequestsError') {
+      console.error('[translator] API 请求次数超限:', {
+        错误类型: error.constructor.name,
+        错误信息: error.message
+      });
+      throw error;  // 直接抛出错误，不重试
+    }
+    
+    // 其他错误记录日志
+    console.error('[translator] 翻译失败:', {
+      错误类型: error.constructor.name,
+      错误信息: error.message,
+      原文前50字符: text.substring(0, 50)
+    });
+    throw error;
   }
 }
 
