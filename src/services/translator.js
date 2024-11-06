@@ -18,26 +18,37 @@ async function retryTranslate(text, retries = 3) {
       }
       
       if (!cleanText) {
+        console.error('[translator] 清理后文本为空:', {
+          原文长度: text.length,
+          原文前30字符: text.substring(0, 30)
+        });
         return { text: '' };
       }
       
       const result = await translate(cleanText, { to: 'zh-CN' });
       
       if (!result || !result.text) {
-        throw new Error('翻译结果为空');
+        throw new Error('翻译API返回结果为空');
       }
+      
+      console.log('[translator] 翻译成功:', {
+        原文前30字符: cleanText.substring(0, 30),
+        译文前30字符: result.text.substring(0, 30)
+      });
       
       return result;
     } catch (error) {
-      console.error(`翻译失败 (尝试 ${i + 1}/${retries}):`, {
-        error: error.message,
-        type: error.constructor.name,
-        originalText: text.substring(0, 100) + '...',  // 记录原始文本的前100个字符
-        cleanedText: cleanText.substring(0, 100) + '...'  // 记录清理后的文本
+      console.error('[translator] 翻译失败:', {
+        尝试次数: `${i + 1}/${retries}`,
+        错误类型: error.constructor.name,
+        错误信息: error.message,
+        原文前50字符: text.substring(0, 50),
+        清理后前50字符: cleanText.substring(0, 50),
+        API响应: error.response || '无响应信息'
       });
       
       if (i === retries - 1) {
-        throw error;
+        throw new Error(`翻译失败: ${error.message}`);
       }
     }
   }
