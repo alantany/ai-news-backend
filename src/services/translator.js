@@ -80,29 +80,24 @@ async function translateUntranslatedArticles() {
       try {
         console.log(`\n[文章 ${successCount + failCount + 1}] 开始翻译:`, article.title);
         
-        // 标题必须有翻译
+        // 只检查标题翻译
         const titleResult = await retryTranslate(article.title || '');
         if (!titleResult.text) {
           throw new Error('标题翻译为空');
         }
 
-        // 内容必须有翻译
+        // 内容和摘要都允许为空
         const contentResult = await retryTranslate(article.content || '');
-        if (!contentResult.text) {
-          throw new Error('内容翻译为空');
-        }
-
-        // 摘要可以为空
         const summaryResult = await retryTranslate(article.summary || '');
         
-        // 更新文章，摘要可以为空
+        // 更新文章，内容和摘要允许为空
         const updatedArticle = await Article.findByIdAndUpdate(
           article._id,
           {
             $set: {
               translatedTitle: titleResult.text,
-              translatedContent: contentResult.text,
-              translatedSummary: summaryResult.text || '',  // 允许为空
+              translatedContent: contentResult.text || '',
+              translatedSummary: summaryResult.text || '',
               isTranslated: true,
               lastTranslated: new Date()
             }
@@ -122,8 +117,8 @@ async function translateUntranslatedArticles() {
         });
         failCount++;
         
-        // 如果是摘要为空的错误，不终止翻译流程
-        if (error.message !== '摘要翻译为空') {
+        // 只有标题翻译失败时才终止流程
+        if (error.message === '标题翻译为空') {
           return {
             success: successCount,
             failed: failCount,
