@@ -7,9 +7,12 @@ async function retryTranslate(text, retries = 3) {
   if (!text) return { text: '' };
   
   const cleanText = text
-    .replace(/\n\s+/g, ' ')  // 替换换行+空格为单个空格
-    .replace(/\s+/g, ' ')    // 替换多个空格为单个空格
-    .trim();                 // 去除首尾空格
+    .replace(/\n+/g, ' ')         // 所有换行符替换为单个空格
+    .replace(/\s+/g, ' ')         // 多个空格替换为单个空格
+    .replace(/\s*:\s*/g, ': ')    // 规范化冒号
+    .replace(/\s*\(\s*/g, ' (')   // 规范化括号
+    .replace(/\s*\)\s*/g, ') ')   // 规范化括号
+    .trim();                      // 去除首尾空格
   
   for (let i = 0; i < retries; i++) {
     try {
@@ -18,8 +21,14 @@ async function retryTranslate(text, retries = 3) {
       }
       
       if (!cleanText) {
+        console.log('[ai-news-backend] 清理后的文本为空:', { originalText: text });
         return { text: '' };
       }
+      
+      console.log('[ai-news-backend] 准备翻译文本:', {
+        原文: text,
+        清理后: cleanText
+      });
       
       const result = await translate(cleanText, { to: 'zh-CN' });
       
@@ -27,13 +36,19 @@ async function retryTranslate(text, retries = 3) {
         throw new Error('翻译结果为空');
       }
       
+      console.log('[ai-news-backend] 翻译成功:', {
+        原文: cleanText,
+        译文: result.text
+      });
+      
       return result;
     } catch (error) {
-      console.error(`翻译失败 (尝试 ${i + 1}/${retries}):`, {
-        error: error.message,
-        type: error.constructor.name,
-        originalText: text.substring(0, 100) + '...',  // 记录原始文本的前100个字符
-        cleanedText: cleanText.substring(0, 100) + '...'  // 记录清理后的文本
+      console.error('[ai-news-backend] 翻译失败:', {
+        尝试次数: `${i + 1}/${retries}`,
+        错误类型: error.constructor.name,
+        错误信息: error.message,
+        原文: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
+        清理后文本: cleanText.substring(0, 100) + (cleanText.length > 100 ? '...' : '')
       });
       
       if (i === retries - 1) {
