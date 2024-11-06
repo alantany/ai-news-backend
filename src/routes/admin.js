@@ -154,4 +154,46 @@ router.get('/debug/articles', async (req, res) => {
   }
 });
 
+// 添加翻译状态检查接口
+router.get('/check-translations', async (req, res) => {
+  try {
+    const articles = await Article.find({}).lean();
+    
+    const stats = {
+      total: articles.length,
+      translated: 0,
+      untranslated: 0,
+      suspicious: 0,  // 可疑的翻译（比如标题相同）
+      details: []
+    };
+
+    articles.forEach(article => {
+      if (!article.isTranslated || !article.translatedTitle) {
+        stats.untranslated++;
+        stats.details.push({
+          id: article._id,
+          title: article.title,
+          status: '未翻译',
+          reason: !article.isTranslated ? 'isTranslated为false' : '无翻译标题'
+        });
+      } else if (article.title === article.translatedTitle) {
+        stats.suspicious++;
+        stats.details.push({
+          id: article._id,
+          title: article.title,
+          status: '可疑',
+          reason: '原文与译文相同'
+        });
+      } else {
+        stats.translated++;
+      }
+    });
+
+    res.json(stats);
+  } catch (error) {
+    console.error('检查翻译状态失败:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router; 

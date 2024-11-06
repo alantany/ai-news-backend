@@ -74,57 +74,54 @@ router.get('/', async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
     
-    console.log('[ai-news-backend] GET /api/articles 查询参数:', { page, limit, skip });
+    // 先查询所有文章，包括未翻译的
+    const allArticles = await Article.find({})
+      .sort({ publishDate: -1 })
+      .lean();
     
-    const query = { 
-      isTranslated: true
-      // 暂时注释掉其他条件，看看是否有文章返回
-      // translatedTitle: { $exists: true, $ne: null },
-      // translatedSummary: { $exists: true, $ne: null }
-    };
-    
-    const articles = await Article.find(
-      query, 
-      'title translatedTitle summary translatedSummary publishDate source isTranslated'
-    )
-    .sort({ publishDate: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
-    
-    console.log('[ai-news-backend] 查询结果详情:', {
-      查询条件: query,
-      返回文章数: articles.length,
-      分页信息: { page, limit, skip },
-      文章列表: articles.map(a => ({
-        id: a._id,
-        title: a.title,
-        translatedTitle: a.translatedTitle,
-        hasTranslatedTitle: !!a.translatedTitle,
-        hasTranslatedSummary: !!a.translatedSummary,
-        publishDate: a.publishDate,
-        source: a.source
-      }))
+    // 检查未翻译的文章
+    const untranslatedArticles = allArticles.filter(article => {
+      const needsTranslation = !article.isTranslated || 
+                              !article.translatedTitle ||
+                              article.title === article.translatedTitle;  // 标题相同可能意味着翻译失败
+      
+      if (needsTranslation) {
+        console.log('[articles] 发现未翻译文章:', {
+          id: article._id,
+          title: article.title,
+          translatedTitle: article.translatedTitle,
+          isTranslated: article.isTranslated,
+          publishDate: article.publishDate
+        });
+      }
+      return needsTranslation;
     });
-    
-    const total = await Article.countDocuments(query);
-    console.log('[ai-news-backend] 统计信息:', {
-      总文章数: total,
-      当前页文章数: articles.length,
-      总页数: Math.ceil(total / limit)
+
+    console.log('[articles] 翻译状态统计:', {
+      总文章数: allArticles.length,
+      未翻译数: untranslatedArticles.length,
+      未翻译文章ID列表: untranslatedArticles.map(a => a._id)
     });
+
+    // 使用原来的查询继续处理
+    const query = { isTranslated: true };
+    const articles = await Article.find(query)
+      .sort({ publishDate: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
     
     res.json({
       articles,
       pagination: {
         current: page,
-        total: Math.ceil(total / limit),
+        total: Math.ceil(allArticles.length / limit),
         pageSize: limit,
-        totalItems: total
+        totalItems: allArticles.length
       }
     });
   } catch (error) {
-    console.error('[ai-news-backend] 获取文章列表失败:', error);
+    console.error('[articles] 获取文章列表失败:', error);
     res.status(500).json({ message: error.message });
   }
 });
