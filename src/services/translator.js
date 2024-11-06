@@ -61,12 +61,10 @@ async function translateUntranslatedArticles() {
     
     const untranslatedArticles = await Article.find({
       $or: [
-        { translatedTitle: { $exists: false } },
-        { translatedContent: { $exists: false } },
-        { translatedSummary: { $exists: false } },
-        { translatedTitle: null },
-        { translatedContent: null },
-        { translatedSummary: null }
+        { isTranslated: { $ne: true } },  // 未标记为已翻译
+        { isTranslated: { $exists: false } },  // 或没有 isTranslated 字段
+        { translatedTitle: null },  // 或标题翻译为空
+        { translatedTitle: { $exists: false } }  // 或没有标题翻译字段
       ]
     }).sort({ publishDate: -1 });
     
