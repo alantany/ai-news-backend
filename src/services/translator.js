@@ -6,21 +6,35 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function retryTranslate(text, retries = 3) {
   if (!text) return { text: '' };
   
+  const cleanText = text
+    .replace(/\n\s+/g, ' ')  // 替换换行+空格为单个空格
+    .replace(/\s+/g, ' ')    // 替换多个空格为单个空格
+    .trim();                 // 去除首尾空格
+  
   for (let i = 0; i < retries; i++) {
     try {
       if (i > 0) {
         await delay(2000 * i);
       }
-      return await translate(text, { to: 'zh-CN' });
+      
+      if (!cleanText) {
+        return { text: '' };
+      }
+      
+      const result = await translate(cleanText, { to: 'zh-CN' });
+      
+      if (!result || !result.text) {
+        throw new Error('翻译结果为空');
+      }
+      
+      return result;
     } catch (error) {
       console.error(`翻译失败 (尝试 ${i + 1}/${retries}):`, {
         error: error.message,
-        type: error.constructor.name
+        type: error.constructor.name,
+        originalText: text.substring(0, 100) + '...',  // 记录原始文本的前100个字符
+        cleanedText: cleanText.substring(0, 100) + '...'  // 记录清理后的文本
       });
-      
-      if (error.message === 'Method Not Allowed') {
-        throw new Error('翻译服务暂时不可用，请稍后重试');
-      }
       
       if (i === retries - 1) {
         throw error;
