@@ -81,7 +81,12 @@ async function translateUntranslatedArticles() {
         { isTranslated: { $ne: true } },
         { isTranslated: { $exists: false } },
         { translatedTitle: null },
-        { translatedTitle: { $exists: false } }
+        { translatedTitle: { $exists: false } },
+        {
+          $expr: {
+            $eq: ["$title", "$translatedTitle"]
+          }
+        }
       ]
     }).sort({ publishDate: -1 });
     
