@@ -33,7 +33,7 @@ async function retryTranslate(text, retries = 3) {
       
       console.log('[translator] 翻译成功:', {
         原文前30字符: cleanText.substring(0, 30),
-        译文前30��符: result.text.substring(0, 30)
+        译文前30字符: result.text.substring(0, 30)
       });
       
       return result;
