@@ -177,7 +177,19 @@ async function updateCrawlJob() {
           await crawler.crawl();
           
           // 2. 翻译未翻译的文章
-          await translateUntranslatedArticles();
+          try {
+            const result = await translateUntranslatedArticles();
+            if (result.error && result.error.includes('Too Many Requests')) {
+              console.log('[定时任务] 检测到 API 请求限制，停止翻译流程');
+              return;  // 直接退出定时任务
+            }
+          } catch (error) {
+            if (error.constructor.name === 'TooManyRequestsError') {
+              console.log('[定时任务] 检测到 API 请求限制，停止翻译流程');
+              return;  // 直接退出定时任务
+            }
+            console.error('[定时任务] 翻译过程出错:', error);
+          }
           
           console.log('定时任务完成');
         } catch (error) {
@@ -196,7 +208,7 @@ async function updateCrawlJob() {
 
 // 监听设置变化
 Setting.watch().on('change', async () => {
-  console.log('检测到设置变���，更新定时任务');
+  console.log('检测到设置变，更新定时任务');
   await updateCrawlJob();
 });
 
